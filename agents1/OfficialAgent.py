@@ -798,31 +798,51 @@ class BaselineAgent(ArtificialBrain):
         return trustBeliefs
 
     def _trustBelief(self, members, trustBeliefs, folder, receivedMessages):
+
+        for member in self._teamMembers:
+            for message in self._sendMessages:
+
+                # The human has asked help to remove something but the human could also have done itself,
+                # however the human has not lied about the obstacle
+                if 'because you asked me to' in message:
+                    trustBeliefs[self._humanName]['competence']+=0.10
+                    trustBeliefs[self._humanName]['willingness']-=0.10
+
+
+                # The human has lied about something since all the rooms have been
+                # searched and some victims are still not found
+                if 'research' in message:
+                    trustBeliefs[self._humanName]['competence']-=0.10
+
+                # The human has asked help to remove something it could not do itself
+                if 'Lets remove' in message:
+                    trustBeliefs[self._humanName]['competence']+=0.10
+                    trustBeliefs[self._humanName]['willingness']+=0.10
+
+                # The human has asked help and nothing was there
+                # TODO: implement if the human has asked for help,
+                #  how can we retrieve what the human has said before
+                if 'because it is the closest unsearched area' in message:
+                    trustBeliefs[self._humanName]['competence']-=0.10
+
+
         '''
         Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
         '''
         # Update the trust value based on for example the received messages
         for message in receivedMessages:
 
-            if 'Search' in message:
-                room_number = message.content.split("Search: ")[1]
-                if trustBeliefs[self._humanName]['confidence'] > 0.5:
-                    self._searchedRooms.append(room_number)
-                receivedMessages.remove(message)
+            # The human does not want the robot to rescue a victim
+            if 'Continue' in message:
+                trustBeliefs[self._humanName]['willingness']-=0.10
 
-            if 'Collect' in message:
-                # Identify which victim and area it concerns
-                if len(message.split()) == 6:
-                    collectVic = ' '.join(message.split()[1:4])
-                else:
-                    collectVic = ' '.join(message.split()[1:5])
-                loc = 'area ' + message.split()[-1]
+            # The human is willing to help the robot
+            if 'Remove together' in message:
+                trustBeliefs[self._humanName]['willingness']+=0.10
 
-                if trustBeliefs[self._humanName]['confidence'] > 0.5:
-                    self._foundVictims
-
-
-
+            # The human is willing to help the robot
+            if 'Rescue together' in message:
+                trustBeliefs[self._humanName]['willingness']+=0.10
 
             # Increase agent trust in a team member that rescued a victim
             if 'Collect' in message:
