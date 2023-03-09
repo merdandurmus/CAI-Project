@@ -668,10 +668,9 @@ class BaselineAgent(ArtificialBrain):
                 zones.append(place)
         return zones
 
+
     def _processMessages(self, state, teamMembers, condition):
-        '''
-        process incoming messages received from the team members
-        '''
+        # process incoming messages received from the team members
         
         receivedMessages = {}
         # Create a dictionary with a list of received messages from each team member
@@ -765,6 +764,9 @@ class BaselineAgent(ArtificialBrain):
             if mssgs and mssgs[-1].split()[-1] in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14']:
                 self._humanLoc = int(mssgs[-1].split()[-1])
 
+
+
+
     def _loadBelief(self, members, folder):
         '''
         Loads trust belief values if agent already collaborated with human before, otherwise trust belief values are initialized using default values.
@@ -801,6 +803,27 @@ class BaselineAgent(ArtificialBrain):
         '''
         # Update the trust value based on for example the received messages
         for message in receivedMessages:
+
+            if 'Search' in message:
+                room_number = message.content.split("Search: ")[1]
+                if trustBeliefs[self._humanName]['confidence'] > 0.5:
+                    self._searchedRooms.append(room_number)
+                receivedMessages.remove(message)
+
+            if 'Collect' in message:
+                # Identify which victim and area it concerns
+                if len(message.split()) == 6:
+                    collectVic = ' '.join(message.split()[1:4])
+                else:
+                    collectVic = ' '.join(message.split()[1:5])
+                loc = 'area ' + message.split()[-1]
+
+                if trustBeliefs[self._humanName]['confidence'] > 0.5:
+                    self._foundVictims
+
+
+
+
             # Increase agent trust in a team member that rescued a victim
             if 'Collect' in message:
                 trustBeliefs[self._humanName]['competence']+=0.10
