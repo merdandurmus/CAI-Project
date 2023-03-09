@@ -805,19 +805,19 @@ class BaselineAgent(ArtificialBrain):
                 # The human has asked help to remove something but the human could also have done itself,
                 # however the human has not lied about the obstacle
                 if 'because you asked me to' in message:
-                    trustBeliefs[self._humanName]['competence']+=trustBeliefs[self._humanName]['competence']/100 * 15
-                    trustBeliefs[self._humanName]['willingness']-=trustBeliefs[self._humanName]['willingness']/100 * 15
+                    trustBeliefs[self._humanName]['competence']+= np.clip(trustBeliefs[self._humanName]['competence']/100 * 15, 0, 1)
+                    trustBeliefs[self._humanName]['willingness']-= np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0, 1)
 
 
                 # The human has lied about something since all the rooms have been
                 # searched and some victims are still not found
                 if 'research' in message:
-                    trustBeliefs[self._humanName]['competence'] -= trustBeliefs[self._humanName]['competence']/100 * 50
+                    trustBeliefs[self._humanName]['competence'] -= np.clip(trustBeliefs[self._humanName]['competence']/100 * 15, 0, 1)
 
                 # The human has asked help to remove something it could not do itself
                 if 'Lets remove' in message:
-                    trustBeliefs[self._humanName]['competence']+=trustBeliefs[self._humanName]['competence']/100 * 20
-                    trustBeliefs[self._humanName]['willingness']+=trustBeliefs[self._humanName]['willingness']/100 * 20
+                    trustBeliefs[self._humanName]['competence']+=np.clip(trustBeliefs[self._humanName]['competence']/100 * 15, 0, 1)
+                    trustBeliefs[self._humanName]['willingness']+=np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0, 1)
 
                 # The human has asked help and nothing was there
                 # TODO: implement if the human has asked for help,
@@ -834,15 +834,15 @@ class BaselineAgent(ArtificialBrain):
 
             # The human does not want the robot to rescue a victim
             if 'Continue' in message:
-                trustBeliefs[self._humanName]['willingness'] -= trustBeliefs[self._humanName]['willingness']/100 * 10
+                trustBeliefs[self._humanName]['willingness'] -= np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0 , 1)
 
             # The human is willing to help the robot
             if 'Remove together' in message:
-                trustBeliefs[self._humanName]['willingness'] += trustBeliefs[self._humanName]['willingness']/100 * 15
+                trustBeliefs[self._humanName]['willingness'] += np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0 , 1)
 
             # The human is willing to help the robot
             if 'Rescue together' in message:
-                trustBeliefs[self._humanName]['willingness'] += trustBeliefs[self._humanName]['willingness']/100 * 20
+                trustBeliefs[self._humanName]['willingness'] += np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0 , 1)
 
             # Increase agent trust in a team member that rescued a victim
             if 'Collect' in message:
