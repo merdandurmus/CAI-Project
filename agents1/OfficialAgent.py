@@ -79,6 +79,14 @@ class BaselineAgent(ArtificialBrain):
         # Filtering of the world state before deciding on an action
         return state
 
+    def get_binary_willingness(self, trustBeliefs):
+        willingness = (trustBeliefs[self._humanName]["willingness"] + 1) / 2
+        return np.choice.random([0, 1], 1, p=[1-willingness, willingness])
+    
+    def get_binary_competence(self, trustBeliefs):
+        competence = (trustBeliefs[self._humanName]["competence"] + 1) / 2
+        return np.choice.random([0, 1], 1, p=[1-competence, competence])
+
     def decide_on_actions(self, state):
         # Identify team members
         agent_name = state[self.agent_id]['obj_id']
@@ -88,12 +96,13 @@ class BaselineAgent(ArtificialBrain):
         # Create a list of received messages from the human team member
         for mssg in self.received_messages:
             for member in self._teamMembers:
-                if mssg.from_id == member and mssg.content not in self._receivedMessages:  # ToDo why the second check? Maybe for updating the trust, we need to check whether a message is sent twice or not
+                if mssg.from_id == member and mssg.content not in self._receivedMessages:  # TODO why the second check? Maybe for updating the trust, we need to check whether a message is sent twice or not
                     self._receivedMessages.append(mssg.content)
-        # Process messages from team members    # ToDo, see the function definition itself with the todos
+        # Process messages from team members    # TODO, see the function definition itself with the todos
         self._processMessages(state, self._teamMembers, self._condition)
         # Initialize and update trust beliefs for team members
         trustBeliefs = self._loadBelief(self._teamMembers, self._folder)
+
         self._trustBelief(self._teamMembers, trustBeliefs, self._folder, self._receivedMessages)
 
         # Check whether human is close in distance
@@ -135,6 +144,7 @@ class BaselineAgent(ArtificialBrain):
 
         # Ongoing loop untill the task is terminated, using different phases for defining the agent's behavior
         while True:
+            print(self._phase)
             if Phase.INTRO == self._phase:
                 # Send introduction message
                 self._sendMessage('Hello! My name is RescueBot. Together we will collaborate and try to search and rescue the 8 victims on our right as quickly as possible. \
@@ -174,7 +184,7 @@ class BaselineAgent(ArtificialBrain):
 
                 # Check which victims can be rescued next because human or agent already found them
                 for vic in remainingVics:
-                    # ToDo, based on whether human is trustworthy, we can select or not select critical victims
+                    # TODO, based on whether human is trustworthy, we can select or not select critical victims
                     # Define a previously found victim as target victim because all areas have been searched
                     if vic in self._foundVictims and vic in self._todo and len(self._searchedRooms)==0:
                         self._goalVic = vic
@@ -190,7 +200,7 @@ class BaselineAgent(ArtificialBrain):
                         if 'location' not in self._foundVictimLocs[vic].keys():
                             self._phase = Phase.PLAN_PATH_TO_ROOM
                             return Idle.__name__, {'duration_in_ticks': 25}
-                    # ToDo, based on whether human is trustworthy, we can select or not select critical victims
+                    # TODO, based on whether human is trustworthy, we can select or not select critical victims
                     # Define a previously found victim as target victim # ToDo, understand the difference with the previous one
                     if vic in self._foundVictims and vic not in self._todo:
                         self._goalVic = vic
@@ -216,12 +226,13 @@ class BaselineAgent(ArtificialBrain):
             if Phase.PICK_UNSEARCHED_ROOM == self._phase:
                 agent_location = state[self.agent_id]['location']
                 # Identify which areas are not explored yet
+                # TODO: add areas 
                 unsearchedRooms = [room['room_name'] for room in state.values()
                                    if 'class_inheritance' in room
                                    and 'Door' in room['class_inheritance']
                                    and room['room_name'] not in self._searchedRooms
                                    and room['room_name'] not in self._tosearch]
-                # ToDo, maybe we need to adjust
+                # TODO PICK_UNSEARCHED_ROOM maybe we need to adjust
                 # If all areas have been searched but the task is not finished, start searching areas again
                 if self._remainingZones and len(unsearchedRooms) == 0:
                     self._tosearch = []
@@ -503,6 +514,8 @@ class BaselineAgent(ArtificialBrain):
                     # Execute move actions to explore the area
                     return action, {}
 
+                #TODO FOLLOW_ROOM_SEARCH_PATH: take into account trust when interpreting the message from human
+                #TODO FOLLOW_ROOM_SEARCH_PATH: don't wait too long until making a decision (at some point do what you think it should be done)
                 # Communicate that the agent did not find the target victim in the area while the human previously communicated the victim was located here
                 if self._goalVic in self._foundVictims and self._goalVic not in self._roomVics and self._foundVictimLocs[self._goalVic]['room'] == self._door['room_name']:
                     self._sendMessage(self._goalVic + ' not present in ' + str(self._door['room_name']) + ' because I searched the whole area without finding ' + self._goalVic + '.','RescueBot')
@@ -589,11 +602,17 @@ class BaselineAgent(ArtificialBrain):
 
             if Phase.TAKE_VICTIM == self._phase:
                 # Store all area tiles in a list
+
+                # print ("\n TAKE_VICTIM")
+
                 roomTiles = [info['location'] for info in state.values()
                              if 'class_inheritance' in info
                              and 'AreaTile' in info['class_inheritance']
                              and 'room_name' in info
                              and info['room_name'] == self._foundVictimLocs[self._goalVic]['room']]
+                
+                # print (roomTiles)
+                # print (state.values())
                 self._roomtiles = roomTiles
                 objects = []
                 # When the victim has to be carried by human and agent together, check whether human has arrived at the victim's location
@@ -609,7 +628,9 @@ class BaselineAgent(ArtificialBrain):
                             self._waiting = True
                             self._moving = False
                             return None, {}
+                print (objects)
                 # Add the victim to the list of rescued victims when it has been picked up
+                
                 if len(objects) == 0 and 'critical' in self._goalVic or len(objects) == 0 and 'mild' in self._goalVic and self._rescue=='together':
                     self._waiting = False
                     if self._goalVic not in self._collectedVictims:
@@ -645,6 +666,7 @@ class BaselineAgent(ArtificialBrain):
                 self._phase = Phase.DROP_VICTIM
 
             if Phase.DROP_VICTIM == self._phase:
+                # TODO add a phase to check what other victims are dropped and update the dropped list
                 # Communicate that the agent delivered a mildly injured victim alone to the drop zone
                 if 'mild' in self._goalVic and self._rescue=='alone':
                     self._sendMessage('Delivered ' + self._goalVic + ' at the drop zone.', 'RescueBot')
@@ -686,13 +708,13 @@ class BaselineAgent(ArtificialBrain):
         # Check the content of the received messages
         for mssgs in receivedMessages.values():
             for msg in mssgs:
-                # ToDo
+                # TODO
                 # If a received message involves team members searching areas, add these areas to the memory of areas that have been explored
                 if msg.startswith("Search:"):
                     area = 'area ' + msg.split()[-1]
                     if area not in self._searchedRooms:
                         self._searchedRooms.append(area)
-                # ToDo
+                # TODO
                 # If a received message involves team members finding victims, add these victims and their locations to memory
                 if msg.startswith("Found:"):
                     # Identify which victim and area it concerns
@@ -716,7 +738,7 @@ class BaselineAgent(ArtificialBrain):
                     # Add the found victim to the to do list when the human's condition is not 'weak'
                     if 'mild' in foundVic and condition!='weak':
                         self._todo.append(foundVic)
-                # ToDo
+                # TODO
                 # If a received message involves team members rescuing victims, add these victims and their locations to memory
                 if msg.startswith('Collect:'):
                     # Identify which victim and area it concerns
@@ -740,7 +762,7 @@ class BaselineAgent(ArtificialBrain):
                     # Decide to help the human carry the victim together when the human's condition is weak
                     if condition=='weak':
                         self._rescue = 'together'
-                # ToDo
+                # TODO
                 # If a received message involves team members asking for help with removing obstacles, add their location to memory and come over
                 if msg.startswith('Remove:'):
                     # Come over immediately when the agent is not carrying a victim
