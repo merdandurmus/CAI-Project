@@ -1,4 +1,5 @@
 import sys, random, enum, ast, time, csv
+import numpy as np
 from matrx import grid_world
 from brains1.ArtificialBrain import ArtificialBrain
 from actions1.CustomActions import *
@@ -69,6 +70,7 @@ class BaselineAgent(ArtificialBrain):
         self._recentVic = None
         self._receivedMessages = []
         self._moving = False
+        self._overrideRescueAlone = False
 
     def initialize(self):
         # Initialization of the state tracker and navigation algorithm
@@ -81,11 +83,19 @@ class BaselineAgent(ArtificialBrain):
 
     def get_binary_willingness(self, trustBeliefs):
         willingness = (trustBeliefs[self._humanName]["willingness"] + 1) / 2
-        return np.choice.random([0, 1], 1, p=[1-willingness, willingness])
+        return np.random.choice([0, 1], 1, p=[1-willingness, willingness])
     
     def get_binary_competence(self, trustBeliefs):
         competence = (trustBeliefs[self._humanName]["competence"] + 1) / 2
-        return np.choice.random([0, 1], 1, p=[1-competence, competence])
+        return np.random.choice([0, 1], 1, p=[1-competence, competence])
+    
+    def get_trust(self, trustBeliefs):
+        competence = (trustBeliefs[self._humanName]["competence"] + 1) / 2
+        willingness = (trustBeliefs[self._humanName]["willingness"] + 1) / 2
+        
+        return False
+
+        
 
     def decide_on_actions(self, state):
         # Identify team members
@@ -470,8 +480,13 @@ class BaselineAgent(ArtificialBrain):
                 # Search the area
                 self._state_tracker.update(state)
                 action = self._navigator.get_move_action(self._state_tracker)
+                trust = self.get_trust(trustBeliefs)
+
+                print(action)
                 if action != None:
                     # Identify victims present in the area
+                    print ("\n\n")
+                    print (state)
                     for info in state.values():
                         if 'class_inheritance' in info and 'CollectableBlock' in info['class_inheritance']:
                             vic = str(info['img_name'][8:-4])
@@ -500,19 +515,28 @@ class BaselineAgent(ArtificialBrain):
                                 self._foundVictims.append(vic)
                                 self._foundVictimLocs[vic] = {'location': info['location'],'room': self._door['room_name'], 'obj_id': info['obj_id']}
                                 # Communicate which victim the agent found and ask the human whether to rescue the victim now or at a later stage
+                                # TODO FOLLOW ROOM SEARCH PATH: do not ask person 
+
                                 if 'mild' in vic and self._answered == False and not self._waiting:
-                                    self._sendMessage('Found ' + vic + ' in ' + self._door['room_name'] + '. Please decide whether to "Rescue together", "Rescue alone", or "Continue" searching. \n \n \
-                                        Important features to consider are: \n safe - victims rescued: ' + str(self._collectedVictims) + '\n explore - areas searched: area ' + str(self._searchedRooms).replace('area ','') + '\n \
-                                        clock - extra time when rescuing alone: 15 seconds \n afstand - distance between us: ' + self._distanceHuman,'RescueBot')
-                                    self._waiting = True
+                                    if trust:
+                                        self._sendMessage('Found ' + vic + ' in ' + self._door['room_name'] + '. Please decide whether to "Rescue together", "Rescue alone", or "Continue" searching. \n \n \
+                                            Important features to consider are: \n safe - victims rescued: ' + str(self._collectedVictims) + '\n explore - areas searched: area ' + str(self._searchedRooms).replace('area ','') + '\n \
+                                            clock - extra time when rescuing alone: 15 seconds \n afstand - distance between us: ' + self._distanceHuman,'RescueBot')
+                                        self._waiting = True
+                                    else:
+                                        self._overrideRescueAlone = True
+                                        self._waiting = True
 
                                 if 'critical' in vic and self._answered == False and not self._waiting:
                                     self._sendMessage('Found ' + vic + ' in ' + self._door['room_name'] + '. Please decide whether to "Rescue" or "Continue" searching. \n\n \
                                         Important features to consider are: \n explore - areas searched: area ' + str(self._searchedRooms).replace('area','') + ' \n safe - victims rescued: ' + str(self._collectedVictims) + '\n \
                                         afstand - distance between us: ' + self._distanceHuman,'RescueBot')
                                     self._waiting = True
+
                     # Execute move actions to explore the area
                     return action, {}
+                
+                print(self.received_messages_content)
 
                 #TODO FOLLOW_ROOM_SEARCH_PATH: take into account trust when interpreting the message from human
                 #TODO FOLLOW_ROOM_SEARCH_PATH: don't wait too long until making a decision (at some point do what you think it should be done)
@@ -529,6 +553,8 @@ class BaselineAgent(ArtificialBrain):
                 # Add the area to the list of searched areas
                 if self._door['room_name'] not in self._searchedRooms:
                     self._searchedRooms.append(self._door['room_name'])
+
+                
                 # Make a plan to rescue a found critically injured victim if the human decides so
                 if self.received_messages_content and self.received_messages_content[-1] == 'Rescue' and 'critical' in self._recentVic:
                     self._rescue = 'together'
@@ -558,9 +584,10 @@ class BaselineAgent(ArtificialBrain):
                     self._recentVic = None
                     self._phase = Phase.PLAN_PATH_TO_VICTIM
                 # Make a plan to rescue the mildly injured victim alone if the human decides so, and communicate this to the human
-                if self.received_messages_content and self.received_messages_content[-1] == 'Rescue alone' and 'mild' in self._recentVic:
+                if (self.received_messages_content and self.received_messages_content[-1] == 'Rescue alone' or self._overrideRescueAlone) and 'mild' in self._recentVic:
                     self._sendMessage('Picking up ' + self._recentVic + ' in ' + self._door['room_name'] + '.','RescueBot')
                     self._rescue = 'alone'
+                    self._overrideRescueAlone = False
                     self._answered = True
                     self._waiting = False
                     self._recentVic = None
@@ -580,6 +607,9 @@ class BaselineAgent(ArtificialBrain):
                     self._recentVic = None
                     self._phase = Phase.FIND_NEXT_GOAL
                 return Idle.__name__, {'duration_in_ticks': 25}
+
+
+
 
             if Phase.PLAN_PATH_TO_VICTIM == self._phase:
                 # Plan the path to a found victim using its location
