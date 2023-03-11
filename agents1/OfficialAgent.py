@@ -69,6 +69,7 @@ class BaselineAgent(ArtificialBrain):
         self._recentVic = None
         self._receivedMessages = []
         self._moving = False
+        self._overrideRescueAlone = False
 
     def initialize(self):
         # Initialization of the state tracker and navigation algorithm
@@ -81,15 +82,17 @@ class BaselineAgent(ArtificialBrain):
 
     def get_binary_willingness(self, trustBeliefs):
         willingness = (trustBeliefs[self._humanName]["willingness"] + 1) / 2
-        return np.choice.random([0, 1], 1, p=[1-willingness, willingness])
-
+        return np.random.choice([0, 1], 1, p=[1-willingness, willingness])
+    
     def get_binary_competence(self, trustBeliefs):
         competence = (trustBeliefs[self._humanName]["competence"] + 1) / 2
-        return np.choice.random([0, 1], 1, p=[1-competence, competence])
-
-    # def get_binary_total_trust(self, trustBeliefs):
-    #     willingness = (trustBeliefs[self._humanName]["willingness"] + 1) / 2
-    #     competence = (trustBeliefs[self._humanName]["competence"] + 1) / 2
+        return np.random.choice([0, 1], 1, p=[1-competence, competence])
+    
+    def get_trust(self, trustBeliefs):
+        competence = (trustBeliefs[self._humanName]["competence"] + 1) / 2
+        willingness = (trustBeliefs[self._humanName]["willingness"] + 1) / 2
+        return competence * willingness
+        
 
     def decide_on_actions(self, state):
         # Identify team members
@@ -529,6 +532,7 @@ class BaselineAgent(ArtificialBrain):
                 # Search the area
                 self._state_tracker.update(state)
                 action = self._navigator.get_move_action(self._state_tracker)
+                trust = self.get_trust(trustBeliefs)
                 if action != None:
                     # Identify victims present in the area
                     for info in state.values():
@@ -559,20 +563,29 @@ class BaselineAgent(ArtificialBrain):
                                 self._foundVictims.append(vic)
                                 self._foundVictimLocs[vic] = {'location': info['location'],'room': self._door['room_name'], 'obj_id': info['obj_id']}
                                 # Communicate which victim the agent found and ask the human whether to rescue the victim now or at a later stage
+                                # TODO FOLLOW ROOM SEARCH PATH: do not ask person 
+
                                 if 'mild' in vic and self._answered == False and not self._waiting:
-                                    self._sendMessage('Found ' + vic + ' in ' + self._door['room_name'] + '. Please decide whether to "Rescue together", "Rescue alone", or "Continue" searching. \n \n \
-                                        Important features to consider are: \n safe - victims rescued: ' + str(self._collectedVictims) + '\n explore - areas searched: area ' + str(self._searchedRooms).replace('area ','') + '\n \
-                                        clock - extra time when rescuing alone: 15 seconds \n afstand - distance between us: ' + self._distanceHuman,'RescueBot')
-                                    self._waiting = True
+                                    if trust:
+                                        self._sendMessage('Found ' + vic + ' in ' + self._door['room_name'] + '. Please decide whether to "Rescue together", "Rescue alone", or "Continue" searching. \n \n \
+                                            Important features to consider are: \n safe - victims rescued: ' + str(self._collectedVictims) + '\n explore - areas searched: area ' + str(self._searchedRooms).replace('area ','') + '\n \
+                                            clock - extra time when rescuing alone: 15 seconds \n afstand - distance between us: ' + self._distanceHuman,'RescueBot')
+                                        self._waiting = True
+                                    else:
+                                        self._overrideRescueAlone = True
+                                        self._waiting = True
 
                                 if 'critical' in vic and self._answered == False and not self._waiting:
                                     self._sendMessage('Found ' + vic + ' in ' + self._door['room_name'] + '. Please decide whether to "Rescue" or "Continue" searching. \n\n \
                                         Important features to consider are: \n explore - areas searched: area ' + str(self._searchedRooms).replace('area','') + ' \n safe - victims rescued: ' + str(self._collectedVictims) + '\n \
                                         afstand - distance between us: ' + self._distanceHuman,'RescueBot')
                                     self._waiting = True
+
                     # Execute move actions to explore the area
                     return action, {}
 
+                #TODO FOLLOW_ROOM_SEARCH_PATH: take into account trust when interpreting the message from human
+                #TODO FOLLOW_ROOM_SEARCH_PATH: don't wait too long until making a decision (at some point do what you think it should be done)
                 # Communicate that the agent did not find the target victim in the area while the human previously communicated the victim was located here
                 if self._goalVic in self._foundVictims and self._goalVic not in self._roomVics and self._foundVictimLocs[self._goalVic]['room'] == self._door['room_name']:
                     self._sendMessage(self._goalVic + ' not present in ' + str(self._door['room_name']) + ' because I searched the whole area without finding ' + self._goalVic + '.','RescueBot')
@@ -586,6 +599,8 @@ class BaselineAgent(ArtificialBrain):
                 # Add the area to the list of searched areas
                 if self._door['room_name'] not in self._searchedRooms:
                     self._searchedRooms.append(self._door['room_name'])
+
+
                 # Make a plan to rescue a found critically injured victim if the human decides so
                 if self.received_messages_content and self.received_messages_content[-1] == 'Rescue' and 'critical' in self._recentVic:
                     self._rescue = 'together'
@@ -615,9 +630,10 @@ class BaselineAgent(ArtificialBrain):
                     self._recentVic = None
                     self._phase = Phase.PLAN_PATH_TO_VICTIM
                 # Make a plan to rescue the mildly injured victim alone if the human decides so, and communicate this to the human
-                if self.received_messages_content and self.received_messages_content[-1] == 'Rescue alone' and 'mild' in self._recentVic:
+                if (self.received_messages_content and self.received_messages_content[-1] == 'Rescue alone' or self._overrideRescueAlone) and 'mild' in self._recentVic:
                     self._sendMessage('Picking up ' + self._recentVic + ' in ' + self._door['room_name'] + '.','RescueBot')
                     self._rescue = 'alone'
+                    self._overrideRescueAlone = False
                     self._answered = True
                     self._waiting = False
                     self._recentVic = None
@@ -637,6 +653,9 @@ class BaselineAgent(ArtificialBrain):
                     self._recentVic = None
                     self._phase = Phase.FIND_NEXT_GOAL
                 return Idle.__name__, {'duration_in_ticks': 25}
+
+
+
 
             if Phase.PLAN_PATH_TO_VICTIM == self._phase:
                 # Plan the path to a found victim using its location
@@ -680,6 +699,7 @@ class BaselineAgent(ArtificialBrain):
                             self._moving = False
                             return None, {}
                 # Add the victim to the list of rescued victims when it has been picked up
+
                 if len(objects) == 0 and 'critical' in self._goalVic or len(objects) == 0 and 'mild' in self._goalVic and self._rescue=='together':
                     self._waiting = False
                     if self._goalVic not in self._collectedVictims:
@@ -715,6 +735,7 @@ class BaselineAgent(ArtificialBrain):
                 self._phase = Phase.DROP_VICTIM
 
             if Phase.DROP_VICTIM == self._phase:
+                # TODO add a phase to check what other victims are dropped and update the dropped list
                 # Communicate that the agent delivered a mildly injured victim alone to the drop zone
                 if 'mild' in self._goalVic and self._rescue=='alone':
                     self._sendMessage('Delivered ' + self._goalVic + ' at the drop zone.', 'RescueBot')
