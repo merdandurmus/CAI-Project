@@ -70,6 +70,8 @@ class BaselineAgent(ArtificialBrain):
         self._recentVic = None
         self._receivedMessages = []
         self._moving = False
+        self.waitingForDecisionResponse = False
+        self.decisionDistance = None
 
     def initialize(self):
         # Initialization of the state tracker and navigation algorithm
@@ -799,10 +801,69 @@ class BaselineAgent(ArtificialBrain):
 
     def _trustBelief(self, members, trustBeliefs, folder, receivedMessages):
         '''
-        Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
+        TO DO ( Vlad ):
+            -> Clean code
+            -> Change trust based on context ( baddly injured/ mildly injured)
+            -> [BUG] some removal have "Remove togheter", some do not, handle this
+        OBSERVATIONS ( Vlad ):
+            ->Trust is much harder to gain than to lose as mistakes cost more time than 
+                we benefit if we collaborate ( one mistakes still weight more than one right action ) 
+            ->Willingness can be wierd because there might be motive behind it, but not enough time/methods to communicate it
         '''
         # Update the trust value based on for example the received messages
+
+        for member in self._teamMembers:
+            for message in self._sendMessages:
+
+                # reduce 20% of the competence score for misscommunication of victims
+                if 'because I searched the whole area without finding' in message:                  # subtract the same competence for critical and normal?
+                        trustBeliefs[self._humanName]['competence'] = np.clip(trustBeliefs[self._humanName]['competence'] * (1-20/100), 0, 1)
+                        self._sendMessages.remove(message)   
+                
+                # add 15% of the competence score for helpfull communication of victims
+                if 'because you told me' in message and 'was located here' in message:
+                        trustBeliefs[self._humanName]['competence'] = np.clip(trustBeliefs[self._humanName]['competence'] * (1+15/100), 0, 1)
+                        self._sendMessages.remove(message)   
+
+                if 'blocking area' in message and 'Please decide whether to' in message:
+                        self.waitingForDecisionResponse = True
+                        self.decisionDistance = message.split('distance between us:')[1]  
+                        self._sendMessages.remove(message)        
+
         for message in receivedMessages:
+
+            if 'Continue' in message:
+                if self.waitingForDecisionResponse:                        # We can collaborate but you refused, reduce willingness
+                    trustChangeValue = 30/100 if "close" in self.decisionDistance else 20/100 
+                    trustBeliefs[self._humanName]['willingness'] = np.clip(trustBeliefs[self._humanName]['willingness'] * (1-trustChangeValue), 0, 1)
+                    self.decisionDistance = None
+                    self.waitingForDecisionResponse = False
+
+                receivedMessages.remove(message)
+
+            if 'Remove alone' in message:
+                if self.waitingForDecisionResponse:                        # We can collaborate but you decided you do not want to help
+                    trustChangeValue = 20/100 if "close" in self.decisionDistance else 10/100 
+                    trustBeliefs[self._humanName]['willingness'] = np.clip(trustBeliefs[self._humanName]['willingness'] * (1-trustChangeValue), 0, 1)
+                    self.decisionDistance = None
+                    self.waitingForDecisionResponse = False
+
+                receivedMessages.remove(message)
+
+
+            if 'Remove together' in message:   
+                if self.waitingForDecisionResponse:                         # We can collaborate and you want to collaborate
+                    trustChangeValue = 20/100 if "close" in self.decisionDistance else 15/100 
+                    trustBeliefs[self._humanName]['willingness'] = np.clip(trustBeliefs[self._humanName]['willingness'] * (1+trustChangeValue), 0, 1)
+                    self.decisionDistance = None
+                    self.waitingForDecisionResponse = False
+
+                receivedMessages.remove(message)
+
+
+            if 'Remove' in message:                                         # Only good option if we cannot work togheter
+                receivedMessages.remove(message)
+                self.waitingForDecisionResponse = False
 
             if 'Search' in message:
                 room_number = message.content.split("Search: ")[1]
