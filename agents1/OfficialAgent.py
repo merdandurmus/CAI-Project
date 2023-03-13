@@ -189,7 +189,7 @@ class BaselineAgent(ArtificialBrain):
 
                 # Check which victims can be rescued next because human or agent already found them
                 for vic in remainingVics:
-                    # TODO, based on whether human is trustworthy, we can select or not select critical victims
+                    # TODO, based on whether human is trustworthy, we can select or not select critical victims, maybe because we always want to do it together then?
                     # Define a previously found victim as target victim because all areas have been searched
                     if vic in self._foundVictims and vic in self._todo and len(self._searchedRooms)==0:
                         self._goalVic = vic
