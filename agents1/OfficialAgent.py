@@ -670,11 +670,14 @@ class BaselineAgent(ArtificialBrain):
                 zones.append(place)
         return zones
 
+
     def _processMessages(self, state, teamMembers, condition):
         '''
         process incoming messages received from the team members
         '''
 
+        # process incoming messages received from the team members
+        
         receivedMessages = {}
         # Create a dictionary with a list of received messages from each team member
         for member in teamMembers:
@@ -771,6 +774,9 @@ class BaselineAgent(ArtificialBrain):
             if mssgs and mssgs[-1].split()[-1] in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14']:
                 self._humanLoc = int(mssgs[-1].split()[-1])
 
+
+
+
     def _loadBelief(self, members, folder):
         '''
         Loads trust belief values if agent already collaborated with human before, otherwise trust belief values are initialized using default values.
@@ -802,16 +808,60 @@ class BaselineAgent(ArtificialBrain):
         return trustBeliefs
 
     def _trustBelief(self, members, trustBeliefs, folder, receivedMessages):
+
+        for member in self._teamMembers:
+            for message in self._sendMessages:
+
+                # The human has asked help to remove something but the human could also have done itself,
+                # however the human has not lied about the obstacle
+                if 'because you asked me to' in message:
+                    trustBeliefs[self._humanName]['competence']+= np.clip(trustBeliefs[self._humanName]['competence']/100 * 15, 0, 1)
+                    trustBeliefs[self._humanName]['willingness']-= np.clip(trustBeliefs[self._humanName]['willingness']/100 * 10, 0, 1)
+                    self._sendMessages.remove(message)
+
+
+                # The human has lied about something since all the rooms have been
+                # searched and some victims are still not found
+                if 're-search' in message:
+                    trustBeliefs[self._humanName]['competence'] -= np.clip(trustBeliefs[self._humanName]['competence']/100 * 25, 0, 1)
+                    self._sendMessages.remove(message)
+
+                # The human has asked help to remove something it could not do itself
+                if 'Lets remove' in message:
+                    trustBeliefs[self._humanName]['competence']+=np.clip(trustBeliefs[self._humanName]['competence']/100 * 15, 0, 1)
+                    trustBeliefs[self._humanName]['willingness']+=np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0, 1)
+                    self._sendMessages.remove(message)
+
+
         '''
         Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
         '''
         # Update the trust value based on for example the received messages
         for message in receivedMessages:
+
+            # The human does not want the robot to rescue a victim
+            if 'Continue' in message:
+                trustBeliefs[self._humanName]['willingness'] -= np.clip(trustBeliefs[self._humanName]['willingness']/100 * 5, 0 , 1)
+
+            # The human is willing to help the robot
+            if 'Remove together' in message:
+                trustBeliefs[self._humanName]['willingness'] += np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0 , 1)
+
+            # The human is willing to help the robot rescue a mildly injured victim
+            if 'Rescue together' in message and 'mild' in self._goalVic:
+                trustBeliefs[self._humanName]['willingness'] += np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0 , 1)
+
+            # The human is willing to help the robot rescue a critically injured victim
+            if 'Rescue' in message and 'critical' in self._goalVic:
+                trustBeliefs[self._humanName]['willingness'] += np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0 , 1)
+
             # Increase agent trust in a team member that rescued a victim
-            if 'Collect' in message:
-                trustBeliefs[self._humanName]['competence']+=0.10
+            #if 'Collect' in message:
+            #    trustBeliefs[self._humanName]['competence']+=0.10
                 # Restrict the competence belief to a range of -1 to 1
-                trustBeliefs[self._humanName]['competence'] = np.clip(trustBeliefs[self._humanName]['competence'], -1, 1)
+            #    trustBeliefs[self._humanName]['competence'] = np.clip(trustBeliefs[self._humanName]['competence'], -1, 1)
+
+
         # Save current trust belief values so we can later use and retrieve them to add to a csv file with all the logged trust belief values
         with open(folder + '/beliefs/currentTrustBelief.csv', mode='w') as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
