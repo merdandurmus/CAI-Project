@@ -806,24 +806,21 @@ class BaselineAgent(ArtificialBrain):
                 # however the human has not lied about the obstacle
                 if 'because you asked me to' in message:
                     trustBeliefs[self._humanName]['competence']+= np.clip(trustBeliefs[self._humanName]['competence']/100 * 15, 0, 1)
-                    trustBeliefs[self._humanName]['willingness']-= np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0, 1)
+                    trustBeliefs[self._humanName]['willingness']-= np.clip(trustBeliefs[self._humanName]['willingness']/100 * 10, 0, 1)
+                    self._sendMessages.remove(message)
 
 
                 # The human has lied about something since all the rooms have been
                 # searched and some victims are still not found
-                if 'research' in message:
-                    trustBeliefs[self._humanName]['competence'] -= np.clip(trustBeliefs[self._humanName]['competence']/100 * 15, 0, 1)
+                if 're-search' in message:
+                    trustBeliefs[self._humanName]['competence'] -= np.clip(trustBeliefs[self._humanName]['competence']/100 * 25, 0, 1)
+                    self._sendMessages.remove(message)
 
                 # The human has asked help to remove something it could not do itself
                 if 'Lets remove' in message:
                     trustBeliefs[self._humanName]['competence']+=np.clip(trustBeliefs[self._humanName]['competence']/100 * 15, 0, 1)
                     trustBeliefs[self._humanName]['willingness']+=np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0, 1)
-
-                # The human has asked help and nothing was there
-                # TODO: implement if the human has asked for help,
-                #  how can we retrieve what the human has said before
-                if 'because it is the closest unsearched area' in message:
-                    trustBeliefs[self._humanName]['competence']-=0.10
+                    self._sendMessages.remove(message)
 
 
         '''
@@ -834,21 +831,27 @@ class BaselineAgent(ArtificialBrain):
 
             # The human does not want the robot to rescue a victim
             if 'Continue' in message:
-                trustBeliefs[self._humanName]['willingness'] -= np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0 , 1)
+                trustBeliefs[self._humanName]['willingness'] -= np.clip(trustBeliefs[self._humanName]['willingness']/100 * 5, 0 , 1)
 
             # The human is willing to help the robot
             if 'Remove together' in message:
                 trustBeliefs[self._humanName]['willingness'] += np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0 , 1)
 
-            # The human is willing to help the robot
-            if 'Rescue together' in message:
+            # The human is willing to help the robot rescue a mildly injured victim
+            if 'Rescue together' in message and 'mild' in self._goalVic:
+                trustBeliefs[self._humanName]['willingness'] += np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0 , 1)
+
+            # The human is willing to help the robot rescue a critically injured victim
+            if 'Rescue' in message and 'critical' in self._goalVic:
                 trustBeliefs[self._humanName]['willingness'] += np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0 , 1)
 
             # Increase agent trust in a team member that rescued a victim
-            if 'Collect' in message:
-                trustBeliefs[self._humanName]['competence']+=0.10
+            #if 'Collect' in message:
+            #    trustBeliefs[self._humanName]['competence']+=0.10
                 # Restrict the competence belief to a range of -1 to 1
-                trustBeliefs[self._humanName]['competence'] = np.clip(trustBeliefs[self._humanName]['competence'], -1, 1)
+            #    trustBeliefs[self._humanName]['competence'] = np.clip(trustBeliefs[self._humanName]['competence'], -1, 1)
+
+
         # Save current trust belief values so we can later use and retrieve them to add to a csv file with all the logged trust belief values
         with open(folder + '/beliefs/currentTrustBelief.csv', mode='w') as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
