@@ -1,4 +1,5 @@
 import sys, random, enum, ast, time, csv
+from datetime import datetime
 from matrx import grid_world
 from brains1.ArtificialBrain import ArtificialBrain
 from actions1.CustomActions import *
@@ -131,6 +132,8 @@ class BaselineAgent(ArtificialBrain):
         self._receivedMessages = []
         self._moving = False
         self._overrideRescueAlone = False
+        self._overrideContinue = False
+        self._timeStartedWaiting = datetime.now()
 
     def initialize(self):
         # Initialization of the state tracker and navigation algorithm
@@ -654,6 +657,7 @@ class BaselineAgent(ArtificialBrain):
                                                     Important features to consider are: \n safe - victims rescued: ' + str(self._collectedVictims) + '\n explore - areas searched: area ' + str(self._searchedRooms).replace('area ','') + '\n \
                                                     clock - extra time when rescuing alone: 15 seconds \n afstand - distance between us: ' + self._distanceHuman,'RescueBot')
                                                 self._waiting = True
+                                                self._timeStartedWaiting = datetime.now()
                                             else:
                                                 self._overrideRescueAlone = True
                                                 self._waiting = True
@@ -662,6 +666,7 @@ class BaselineAgent(ArtificialBrain):
                                             self._sendMessage('Found ' + vic + ' in ' + self._door['room_name'] + '. Please decide whether to "Rescue" or "Continue" searching. \n\n \
                                                 Important features to consider are: \n explore - areas searched: area ' + str(self._searchedRooms).replace('area','') + ' \n safe - victims rescued: ' + str(self._collectedVictims) + '\n \
                                                 afstand - distance between us: ' + self._distanceHuman,'RescueBot')
+                                            self._timeStartedWaiting = datetime.now()
                                             self._waiting = True
 
                                         
@@ -688,6 +693,7 @@ class BaselineAgent(ArtificialBrain):
                                                 Important features to consider are: \n safe - victims rescued: ' + str(self._collectedVictims) + '\n explore - areas searched: area ' + str(self._searchedRooms).replace('area ','') + '\n \
                                                 clock - extra time when rescuing alone: 15 seconds \n afstand - distance between us: ' + self._distanceHuman,'RescueBot')
                                             self._waiting = True
+                                            self._timeStartedWaiting = datetime.now()
                                         else:
                                             self._overrideRescueAlone = True
                                             self._waiting = True
@@ -696,6 +702,7 @@ class BaselineAgent(ArtificialBrain):
                                         self._sendMessage('Found ' + vic + ' in ' + self._door['room_name'] + '. Please decide whether to "Rescue" or "Continue" searching. \n\n \
                                             Important features to consider are: \n explore - areas searched: area ' + str(self._searchedRooms).replace('area','') + ' \n safe - victims rescued: ' + str(self._collectedVictims) + '\n \
                                             afstand - distance between us: ' + self._distanceHuman,'RescueBot')
+                                        self._timeStartedWaiting = datetime.now()
                                         self._waiting = True
 
                     # Execute move actions to explore the area
@@ -756,14 +763,24 @@ class BaselineAgent(ArtificialBrain):
                     self._recentVic = None
                     self._phase = Phase.FIND_NEXT_GOAL
                 # Continue searching other areas if the human decides so
-                if self.received_messages_content and self.received_messages_content[-1] == 'Continue':
+                if (self.received_messages_content and self.received_messages_content[-1] == 'Continue') or self._overrideContinue:
                     self._answered = True
+                    self._overrideContinue = False
                     self._waiting = False
                     self._todo.append(self._recentVic)
                     self._recentVic = None
                     self._phase = Phase.FIND_NEXT_GOAL
                 # Remain idle untill the human communicates to the agent what to do with the found victim
                 if self.received_messages_content and self._waiting and self.received_messages_content[-1] != 'Rescue' and self.received_messages_content[-1] != 'Continue':
+                    print(datetime.now().timestamp() - self._timeStartedWaiting.timestamp())
+                    if datetime.now().timestamp() - self._timeStartedWaiting.timestamp() >= 10:
+                        trustBeliefs.updateCompetence(-15/100)
+                        if 'mild' in self._recentVic:
+                            self._sendMessage("I've waited too long, I am rescuing this one alone")
+                            self._overrideRescueAlone = True
+                        elif 'critical' in self._recentVic:
+                            self._sendMessage("I've waited too long, I am skipping this one")
+                            self._overrideContinue = True
                     return None, {}
                 # Find the next area to search when the agent is not waiting for an answer from the human or occupied with rescuing a victim
                 if not self._waiting and not self._rescue:
@@ -1024,7 +1041,7 @@ class BaselineAgent(ArtificialBrain):
         return trustBeliefs
 
     def _trustBelief(self, members, trustBeliefs: TrustBelief, folder, receivedMessages):
-    '''
+        '''
         TO DO ( Vlad ):
             -> [BUG] some removal have "Remove togheter", some do not, handle this
         OBSERVATIONS ( Vlad ):
@@ -1035,48 +1052,48 @@ class BaselineAgent(ArtificialBrain):
 
        
         # Update the trust value based on for example the received messages
-        for member in self._teamMembers:                                                            # TO DO: useless for loop
-            for message in self._sendMessages:
+                                                            # TO DO: useless for loop
+        for message in self._sendMessages:
 
-                # reduce 20% of the competence score for misscommunication of victims
-                if 'because I searched the whole area without finding' in message:                  # subtract the same competence for critical and normal?
-                    trustBeliefs.updateCompetence(-20/100)
-                    self._sendMessages.remove(message)   
-                
-                # add 15% of the competence score for helpfull communication of victims
-                if 'because you told me' in message and 'was located here' in message:
-                    trustBeliefs.updateWillingness(15/100)
-                    self._sendMessages.remove(message)   
+            # reduce 20% of the competence score for misscommunication of victims
+            if 'because I searched the whole area without finding' in message:                  # subtract the same competence for critical and normal?
+                trustBeliefs.updateCompetence(-20/100)
+                self._sendMessages.remove(message)   
+            
+            # add 15% of the competence score for helpfull communication of victims
+            if 'because you told me' in message and 'was located here' in message:
+                trustBeliefs.updateWillingness(15/100)
+                self._sendMessages.remove(message)   
 
-                if 'blocking area' in message and 'Please decide whether to' in message:
-                    self.waitingForDecisionResponse = True
-                    self.decisionDistance = message.split('distance between us:')[1]  
-                    self._sendMessages.remove(message)      
+            if 'blocking area' in message and 'Please decide whether to' in message:
+                self.waitingForDecisionResponse = True
+                self.decisionDistance = message.split('distance between us:')[1]  
+                self._sendMessages.remove(message)      
 
-                # The human has asked help to remove something but the human could also have done itself,
-                # however the human has not lied about the obstacle
-                if 'because you asked me to' in message:
-                    # trustBeliefs[self._humanName]['competence']+= np.clip(trustBeliefs[self._humanName]['competence']/100 * 15, 0, 1)
-                    # trustBeliefs[self._humanName]['willingness']-= np.clip(trustBeliefs[self._humanName]['willingness']/100 * 10, 0, 1)
-                    trustBeliefs.updateCompetence(15/100)
-                    trustBeliefs.updateWillingness(-10/100)
-                    self._sendMessages.remove(message)
+            # The human has asked help to remove something but the human could also have done itself,
+            # however the human has not lied about the obstacle
+            if 'because you asked me to' in message:
+                # trustBeliefs[self._humanName]['competence']+= np.clip(trustBeliefs[self._humanName]['competence']/100 * 15, 0, 1)
+                # trustBeliefs[self._humanName]['willingness']-= np.clip(trustBeliefs[self._humanName]['willingness']/100 * 10, 0, 1)
+                trustBeliefs.updateCompetence(15/100)
+                trustBeliefs.updateWillingness(-10/100)
+                self._sendMessages.remove(message)
 
 
-                # The human has lied about something since all the rooms have been
-                # searched and some victims are still not found
-                if 're-search' in message:
-                    # trustBeliefs[self._humanName]['competence'] -= np.clip(trustBeliefs[self._humanName]['competence']/100 * 25, 0, 1)
-                    trustBeliefs.updateCompetence(-25/100)
-                    self._sendMessages.remove(message)
+            # The human has lied about something since all the rooms have been
+            # searched and some victims are still not found
+            if 're-search' in message:
+                # trustBeliefs[self._humanName]['competence'] -= np.clip(trustBeliefs[self._humanName]['competence']/100 * 25, 0, 1)
+                trustBeliefs.updateCompetence(-25/100)
+                self._sendMessages.remove(message)
 
-                # The human has asked help to remove something it could not do itself
-                if 'Lets remove' in message:
-                    # trustBeliefs[self._humanName]['competence']+=np.clip(trustBeliefs[self._humanName]['competence']/100 * 15, 0, 1)
-                    # trustBeliefs[self._humanName]['willingness']+=np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0, 1)
-                    trustBeliefs.updateCompetence(15/100)
-                    trustBeliefs.updateWillingness(15/100)
-                    self._sendMessages.remove(message)
+            # The human has asked help to remove something it could not do itself
+            if 'Lets remove' in message:
+                # trustBeliefs[self._humanName]['competence']+=np.clip(trustBeliefs[self._humanName]['competence']/100 * 15, 0, 1)
+                # trustBeliefs[self._humanName]['willingness']+=np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0, 1)
+                trustBeliefs.updateCompetence(15/100)
+                trustBeliefs.updateWillingness(15/100)
+                self._sendMessages.remove(message)
 
 
         '''
