@@ -802,6 +802,7 @@ class BaselineAgent(ArtificialBrain):
     def _trustBelief(self, members, trustBeliefs, folder, receivedMessages):
         '''
         TO DO ( Vlad ):
+            -> Willingness/competence change based on what TA said
             -> Clean code
             -> Change trust based on context ( baddly injured/ mildly injured)
             -> [BUG] some removal have "Remove togheter", some do not, handle this
@@ -817,12 +818,12 @@ class BaselineAgent(ArtificialBrain):
 
                 # reduce 20% of the competence score for misscommunication of victims
                 if 'because I searched the whole area without finding' in message:                  # subtract the same competence for critical and normal?
-                        trustBeliefs[self._humanName]['competence'] = np.clip(trustBeliefs[self._humanName]['competence'] * (1-20/100), 0, 1)
+                        trustBeliefs[self._humanName]['willingness'] = np.clip(trustBeliefs[self._humanName]['willingness'] * (1-20/100), 0, 1)
                         self._sendMessages.remove(message)   
                 
                 # add 15% of the competence score for helpfull communication of victims
                 if 'because you told me' in message and 'was located here' in message:
-                        trustBeliefs[self._humanName]['competence'] = np.clip(trustBeliefs[self._humanName]['competence'] * (1+15/100), 0, 1)
+                        trustBeliefs[self._humanName]['willingness'] = np.clip(trustBeliefs[self._humanName]['willingness'] * (1+15/100), 0, 1)
                         self._sendMessages.remove(message)   
 
                 if 'blocking area' in message and 'Please decide whether to' in message:
@@ -853,7 +854,7 @@ class BaselineAgent(ArtificialBrain):
 
             if 'Remove together' in message:   
                 if self.waitingForDecisionResponse:                         # We can collaborate and you want to collaborate
-                    trustChangeValue = 20/100 if "close" in self.decisionDistance else 15/100 
+                    trustChangeValue = 15/100 if "close" in self.decisionDistance else 20/100 
                     trustBeliefs[self._humanName]['willingness'] = np.clip(trustBeliefs[self._humanName]['willingness'] * (1+trustChangeValue), 0, 1)
                     self.decisionDistance = None
                     self.waitingForDecisionResponse = False
