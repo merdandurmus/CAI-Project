@@ -1026,9 +1026,6 @@ class BaselineAgent(ArtificialBrain):
     def _trustBelief(self, members, trustBeliefs: TrustBelief, folder, receivedMessages):
     '''
         TO DO ( Vlad ):
-            -> Willingness/competence change based on what TA said
-            -> Clean code
-            -> Change trust based on context ( baddly injured/ mildly injured)
             -> [BUG] some removal have "Remove togheter", some do not, handle this
         OBSERVATIONS ( Vlad ):
             ->Trust is much harder to gain than to lose as mistakes cost more time than 
@@ -1038,44 +1035,6 @@ class BaselineAgent(ArtificialBrain):
 
        
         # Update the trust value based on for example the received messages
-        '''
-
-        for message in receivedMessages:
-
-            if 'Continue' in message:
-                if self.waitingForDecisionResponse:                        # We can collaborate but you refused, reduce willingness
-                    trustChangeValue = 30/100 if "close" in self.decisionDistance else 20/100 
-                    trustBeliefs[self._humanName]['willingness'] = np.clip(trustBeliefs[self._humanName]['willingness'] * (1-trustChangeValue), 0, 1)
-                    self.decisionDistance = None
-                    self.waitingForDecisionResponse = False
-
-                receivedMessages.remove(message)
-
-            if 'Remove alone' in message:
-                if self.waitingForDecisionResponse:                        # We can collaborate but you decided you do not want to help
-                    trustChangeValue = 20/100 if "close" in self.decisionDistance else 10/100 
-                    trustBeliefs[self._humanName]['willingness'] = np.clip(trustBeliefs[self._humanName]['willingness'] * (1-trustChangeValue), 0, 1)
-                    self.decisionDistance = None
-                    self.waitingForDecisionResponse = False
-
-                receivedMessages.remove(message)
-
-
-            if 'Remove together' in message:   
-                if self.waitingForDecisionResponse:                         # We can collaborate and you want to collaborate
-                    trustChangeValue = 15/100 if "close" in self.decisionDistance else 20/100 
-                    trustBeliefs[self._humanName]['willingness'] = np.clip(trustBeliefs[self._humanName]['willingness'] * (1+trustChangeValue), 0, 1)
-                    self.decisionDistance = None
-                    self.waitingForDecisionResponse = False
-
-                receivedMessages.remove(message)
-
-
-            if 'Remove' in message:                                         # Only good option if we cannot work togheter
-                receivedMessages.remove(message)
-                self.waitingForDecisionResponse = False
-
-        '''
         for member in self._teamMembers:                                                            # TO DO: useless for loop
             for message in self._sendMessages:
 
