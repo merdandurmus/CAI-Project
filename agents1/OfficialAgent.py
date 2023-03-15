@@ -35,6 +35,67 @@ class Phase(enum.Enum):
     REMOVE_OBSTACLE_IF_NEEDED = 18,
     ENTER_ROOM = 19
 
+class TrustBelief:
+    path = '/beliefs/allTrustBeliefs.csv'
+    default = 0.5
+    attributes = ['competence', 'willingness']
+    def __init__(self, humanName, folder) -> None:
+        self.trustBeliefs = {}
+        self.folder = folder
+        self.humanName = humanName
+
+        trustfile_header = []
+        trustfile_contents = []
+        with open(folder + TrustBelief.path) as csvfile:
+            reader = csv.reader(csvfile, delimiter=';', quotechar="'")
+            for row in reader:
+                if trustfile_header==[]:
+                    trustfile_header=row
+                    continue
+                # Retrieve trust values
+                if row and row[0]==humanName:
+                    name = row[0]
+                    self.trustBeliefs[name] = {}
+                    for i in range(len(TrustBelief.attributes)):
+                        self.trustBeliefs[name][TrustBelief.attributes[i]] = float(row[i + 1])
+
+                # Initialize default trust values
+                if row and row[0]!=self.humanName:
+                    self.trustBeliefs[self.humanName] = {}
+                    for i in range(len(TrustBelief.attributes)):
+                        self.trustBeliefs[self.humanName][TrustBelief.attributes[i]] = TrustBelief.default
+    
+    def get_binary_willingness(self):
+        willingness = (self.trustBeliefs[self.humanName]["willingness"] + 1) / 2
+        return np.random.choice([0, 1], 1, p=[1-willingness, willingness])
+    
+    
+    def get_binary_competence(self):
+        competence = (self.trustBeliefs[self.humanName]["competence"] + 1) / 2
+        return np.random.choice([0, 1], 1, p=[1-competence, competence])
+    
+    def get_trust(self):
+        competence = (self.trustBeliefs[self.humanName]["competence"] + 1) / 2
+        willingness = (self.trustBeliefs[self.humanName]["willingness"] + 1) / 2
+        return competence * willingness
+
+    def updateCompetence(self, percent, withFlush = False):
+        self.trustBeliefs[self.humanName]['competence']+=np.clip(self.trustBeliefs[self.humanName]['competence'] * percent, -1, 1)
+        if withFlush:
+            flushUpdates()
+    
+    def updateWillingness(self, percent, withFlush = False):
+        self.trustBeliefs[self.humanName]['willingness']+=np.clip(self.trustBeliefs[self.humanName]['willingness'] * percent, -1, 1)
+        if withFlush:
+            flushUpdates()
+
+    def flushUpdates(self):
+        with open(self.folder + TrustBelief.path, mode='w') as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            csv_writer.writerow(['name','competence','willingness'])
+            csv_writer.writerow([self.humanName,self.trustBeliefs[self.humanName]['competence'],self.trustBeliefs[self.humanName]['willingness']])
+
+
 class BaselineAgent(ArtificialBrain):
     def __init__(self, slowdown, condition, name, folder):
         super().__init__(slowdown, condition, name, folder)
@@ -93,22 +154,32 @@ class BaselineAgent(ArtificialBrain):
         willingness = (trustBeliefs[self._humanName]["willingness"] + 1) / 2
         return competence * willingness
         
-
+    aux = 0
     def decide_on_actions(self, state):
         # Identify team members
         agent_name = state[self.agent_id]['obj_id']
         for member in state['World']['team_members']:
             if member != agent_name and member not in self._teamMembers:
                 self._teamMembers.append(member)
+        
+        if BaselineAgent.aux % 30 == 0:
+            print(self._receivedMessages)
+        BaselineAgent.aux += 1
+        # print(BaselineAgent.aux)
         # Create a list of received messages from the human team member
         for mssg in self.received_messages:
             for member in self._teamMembers:
-                if mssg.from_id == member and mssg.content not in self._receivedMessages:  # TODO why the second check? Maybe for updating the trust, we need to check whether a message is sent twice or not
+                 # as the decide_on_action is called in a loop, mssg.content might not change and we don't want to add the same message over and over again
+                if mssg.from_id == member and mssg.content not in self._receivedMessages: 
                     self._receivedMessages.append(mssg.content)
+                # elif mssg.from_id == member:
+                #     print(mssg.content)
+                #     print(self._receivedMessages)
         # Process messages from team members
         self._processMessages(state, self._teamMembers, self._condition)
         # Initialize and update trust beliefs for team members
-        trustBeliefs = self._loadBelief(self._teamMembers, self._folder)
+        # trustBeliefs = self._loadBelief(self._teamMembers, self._folder)
+        trustBeliefs = TrustBelief(self._humanName, self._folder)
         self._trustBelief(self._teamMembers, trustBeliefs, self._folder, self._receivedMessages)
 
         # Check whether human is close in distance
@@ -214,7 +285,7 @@ class BaselineAgent(ArtificialBrain):
                         # if critical
                         if "critical" in vic:
                             # if human not willing and mildly injured, then find next victim
-                            if not self.get_binary_willingness(trustBeliefs) and len(list(filter(lambda v: "mild" in vic, remainingVics))) > 0:
+                            if not trustBeliefs.get_binary_willingness() and len(list(filter(lambda v: "mild" in vic, remainingVics))) > 0:
                                 continue
                             # if willing or only critical left, just rescue in the hope that human will help
                             else:
@@ -222,7 +293,7 @@ class BaselineAgent(ArtificialBrain):
                         # when the human is weak and the victim is mildly injured
                         if 'mild' in vic and self._condition=='weak':
                             # if human is willing, rescue together
-                            if self.get_binary_willingness(trustBeliefs):
+                            if trustBeliefs.get_binary_willingness():
                                 self._rescue = 'together'
                             else:
                                 self._rescue = "alone"
@@ -360,12 +431,12 @@ class BaselineAgent(ArtificialBrain):
                         # Wait for the human to help removing the obstacle and remove the obstacle together
                         if self.received_messages_content and self.received_messages_content[-1] == 'Remove' or self._remove:
                             # if the human indicates to remove the obstacle (maybe he's lying -> competence check)
-                            if self.get_binary_competence(trustBeliefs):
+                            if trustBeliefs.get_binary_competence():
                                 if not self._remove:
                                     self._answered = True
                                 # Tell the human to come over and be idle untill human arrives if human is willing
                                 if not state[{'is_human_agent': True}]:
-                                    if self.get_binary_willingness(trustBeliefs):
+                                    if trustBeliefs.get_binary_willingness():
                                         self._sendMessage('Please come to ' + str(self._door['room_name']) + ' to remove rock.','RescueBot')
                                         return None, {}
                                     else:
@@ -374,7 +445,7 @@ class BaselineAgent(ArtificialBrain):
 
                                 # Tell the human to remove the obstacle when he/she arrives if human is willing (TODO maybe not check willingsness as the human has already arrived, we can have a counter instead to check whether removing is being done or not)
                                 if state[{'is_human_agent': True}]:
-                                    if self.get_binary_willingness(trustBeliefs):
+                                    if trustBeliefs.get_binary_willingness():
                                         self._sendMessage('Lets remove rock blocking ' + str(self._door['room_name']) + '!','RescueBot')
                                         return None, {}
                                     else:
@@ -442,12 +513,12 @@ class BaselineAgent(ArtificialBrain):
                             return RemoveObject.__name__, {'object_id': info['obj_id']}
                         # Remove the obstacle together if the human decides so (after checking competence)
                         if self.received_messages_content and self.received_messages_content[-1] == 'Remove together' or self._remove:
-                            if self.get_binary_competence(trustBeliefs):
+                            if trustBeliefs.get_binary_competence():
                                 if not self._remove:
                                     self._answered = True
                                 # Tell the human to come over and be idle untill human arrives, if human is willing
                                 if not state[{'is_human_agent': True}]:
-                                    if self.get_binary_willingness(trustBeliefs):
+                                    if trustBeliefs.get_binary_willingness():
                                         self._sendMessage('Please come to ' + str(self._door['room_name']) + ' to remove stones together.','RescueBot')
                                         return None, {}
                                     else: # remove the obstacle alone
@@ -461,7 +532,7 @@ class BaselineAgent(ArtificialBrain):
                                         return RemoveObject.__name__, {'object_id': info['obj_id']}
                                 # Tell the human to remove the obstacle when he/she arrives
                                 if state[{'is_human_agent': True}]:  # (TODO maybe not check willingsness as the human has already arrived, we can have a counter instead to check whether removing is being done or not)
-                                    if self.get_binary_willingness(trustBeliefs):
+                                    if trustBeliefs.get_binary_willingness():
                                         self._sendMessage('Lets remove stones blocking ' + str(self._door['room_name']) + '!','RescueBot')
                                         return None, {}
                                     else: # remove the obstacle alone
@@ -532,7 +603,7 @@ class BaselineAgent(ArtificialBrain):
                 # Search the area
                 self._state_tracker.update(state)
                 action = self._navigator.get_move_action(self._state_tracker)
-                trust = self.get_trust(trustBeliefs)
+                trust = trustBeliefs.get_trust()
                 if action != None:
                     # Identify victims present in the area
                     for info in state.values():
@@ -898,7 +969,7 @@ class BaselineAgent(ArtificialBrain):
                     trustBeliefs[self._humanName] = {'competence': competence, 'willingness': willingness}
         return trustBeliefs
 
-    def _trustBelief(self, members, trustBeliefs, folder, receivedMessages):
+    def _trustBelief(self, members, trustBeliefs: TrustBelief, folder, receivedMessages):
 
         for member in self._teamMembers:
             for message in self._sendMessages:
@@ -906,21 +977,26 @@ class BaselineAgent(ArtificialBrain):
                 # The human has asked help to remove something but the human could also have done itself,
                 # however the human has not lied about the obstacle
                 if 'because you asked me to' in message:
-                    trustBeliefs[self._humanName]['competence']+= np.clip(trustBeliefs[self._humanName]['competence']/100 * 15, 0, 1)
-                    trustBeliefs[self._humanName]['willingness']-= np.clip(trustBeliefs[self._humanName]['willingness']/100 * 10, 0, 1)
+                    # trustBeliefs[self._humanName]['competence']+= np.clip(trustBeliefs[self._humanName]['competence']/100 * 15, 0, 1)
+                    # trustBeliefs[self._humanName]['willingness']-= np.clip(trustBeliefs[self._humanName]['willingness']/100 * 10, 0, 1)
+                    trustBeliefs.updateCompetence(15/100)
+                    trustBeliefs.updateWillingness(-10/100)
                     self._sendMessages.remove(message)
 
 
                 # The human has lied about something since all the rooms have been
                 # searched and some victims are still not found
                 if 're-search' in message:
-                    trustBeliefs[self._humanName]['competence'] -= np.clip(trustBeliefs[self._humanName]['competence']/100 * 25, 0, 1)
+                    # trustBeliefs[self._humanName]['competence'] -= np.clip(trustBeliefs[self._humanName]['competence']/100 * 25, 0, 1)
+                    trustBeliefs.updateCompetence(-25/100)
                     self._sendMessages.remove(message)
 
                 # The human has asked help to remove something it could not do itself
                 if 'Lets remove' in message:
-                    trustBeliefs[self._humanName]['competence']+=np.clip(trustBeliefs[self._humanName]['competence']/100 * 15, 0, 1)
-                    trustBeliefs[self._humanName]['willingness']+=np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0, 1)
+                    # trustBeliefs[self._humanName]['competence']+=np.clip(trustBeliefs[self._humanName]['competence']/100 * 15, 0, 1)
+                    # trustBeliefs[self._humanName]['willingness']+=np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0, 1)
+                    trustBeliefs.updateCompetence(15/100)
+                    trustBeliefs.updateWillingness(15/100)
                     self._sendMessages.remove(message)
 
 
@@ -932,19 +1008,23 @@ class BaselineAgent(ArtificialBrain):
 
             # The human does not want the robot to rescue a victim
             if 'Continue' in message:
-                trustBeliefs[self._humanName]['willingness'] -= np.clip(trustBeliefs[self._humanName]['willingness']/100 * 5, 0 , 1)
+                # trustBeliefs[self._humanName]['willingness'] -= np.clip(trustBeliefs[self._humanName]['willingness']/100 * 5, 0 , 1)
+                trustBeliefs.updateWillingness(-5/100)
 
             # The human is willing to help the robot
             if 'Remove together' in message:
-                trustBeliefs[self._humanName]['willingness'] += np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0 , 1)
+                # trustBeliefs[self._humanName]['willingness'] += np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0 , 1)
+                trustBeliefs.updateWillingness(15/100)
 
             # The human is willing to help the robot rescue a mildly injured victim
             if 'Rescue together' in message and 'mild' in self._goalVic:
-                trustBeliefs[self._humanName]['willingness'] += np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0 , 1)
+                # trustBeliefs[self._humanName]['willingness'] += np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0 , 1)
+                trustBeliefs.updateWillingness(15/100)
 
             # The human is willing to help the robot rescue a critically injured victim
             if 'Rescue' in message and 'critical' in self._goalVic:
-                trustBeliefs[self._humanName]['willingness'] += np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0 , 1)
+                # trustBeliefs[self._humanName]['willingness'] += np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0 , 1)
+                trustBeliefs.updateWillingness(15/100)
 
             # Increase agent trust in a team member that rescued a victim
             #if 'Collect' in message:
@@ -952,12 +1032,12 @@ class BaselineAgent(ArtificialBrain):
                 # Restrict the competence belief to a range of -1 to 1
             #    trustBeliefs[self._humanName]['competence'] = np.clip(trustBeliefs[self._humanName]['competence'], -1, 1)
 
-
+        trustBeliefs.flushUpdates()
         # Save current trust belief values so we can later use and retrieve them to add to a csv file with all the logged trust belief values
-        with open(folder + '/beliefs/currentTrustBelief.csv', mode='w') as csv_file:
-            csv_writer = csv.writer(csv_file, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-            csv_writer.writerow(['name','competence','willingness'])
-            csv_writer.writerow([self._humanName,trustBeliefs[self._humanName]['competence'],trustBeliefs[self._humanName]['willingness']])
+        # with open(folder + '/beliefs/currentTrustBelief.csv', mode='w') as csv_file:
+        #     csv_writer = csv.writer(csv_file, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        #     csv_writer.writerow(['name','competence','willingness'])
+        #     csv_writer.writerow([self._humanName,trustBeliefs[self._humanName]['competence'],trustBeliefs[self._humanName]['willingness']])
 
         return trustBeliefs
 
