@@ -1,3 +1,4 @@
+import datetime
 import sys, random, enum, ast, time, csv
 from matrx import grid_world
 from brains1.ArtificialBrain import ArtificialBrain
@@ -73,6 +74,8 @@ class BaselineAgent(ArtificialBrain):
         self._nr_skipped_action = 0    # count for number of actions that are skipped in a row because of a lack of trust
         self._max_allowed_skips = 7     # number of skipping some actions in a row that is allowed, if this is reached, then skipping is not allowed and this value is resetted
         self._searched_rooms_by_robot = []
+        # self._time_started_waiting_for_help = datetime.datetime.now() + datetime.timedelta(weeks=52)    # arbitrary high value as waiting hasn't started yet
+        # self._max_time_difference = 3   # max time allowed for waiting
 
     def initialize(self):
         # Initialization of the state tracker and navigation algorithm
@@ -96,6 +99,10 @@ class BaselineAgent(ArtificialBrain):
         willingness = (trustBeliefs[self._humanName]["willingness"] + 1) / 2
         trust = competence * willingness
         return np.random.choice([0, 1], 1, p=[1-trust, trust])
+
+    # def am_I_waiting_too_long(self, started_waiting_time: datetime.datetime):
+    #     # if waiting longer than self._max_time_difference, then yes you're witing too long
+    #     return datetime.datetime.now() > started_waiting_time.replace(minute=started_waiting_time.minute + self._max_time_difference)
         
 
     def decide_on_actions(self, state):
