@@ -1024,9 +1024,75 @@ class BaselineAgent(ArtificialBrain):
         return trustBeliefs
 
     def _trustBelief(self, members, trustBeliefs: TrustBelief, folder, receivedMessages):
+    '''
+        TO DO ( Vlad ):
+            -> Willingness/competence change based on what TA said
+            -> Clean code
+            -> Change trust based on context ( baddly injured/ mildly injured)
+            -> [BUG] some removal have "Remove togheter", some do not, handle this
+        OBSERVATIONS ( Vlad ):
+            ->Trust is much harder to gain than to lose as mistakes cost more time than 
+                we benefit if we collaborate ( one mistakes still weight more than one right action ) 
+            ->Willingness can be wierd because there might be motive behind it, but not enough time/methods to communicate it
+        '''
 
-        for member in self._teamMembers:
+       
+        # Update the trust value based on for example the received messages
+        '''
+
+        for message in receivedMessages:
+
+            if 'Continue' in message:
+                if self.waitingForDecisionResponse:                        # We can collaborate but you refused, reduce willingness
+                    trustChangeValue = 30/100 if "close" in self.decisionDistance else 20/100 
+                    trustBeliefs[self._humanName]['willingness'] = np.clip(trustBeliefs[self._humanName]['willingness'] * (1-trustChangeValue), 0, 1)
+                    self.decisionDistance = None
+                    self.waitingForDecisionResponse = False
+
+                receivedMessages.remove(message)
+
+            if 'Remove alone' in message:
+                if self.waitingForDecisionResponse:                        # We can collaborate but you decided you do not want to help
+                    trustChangeValue = 20/100 if "close" in self.decisionDistance else 10/100 
+                    trustBeliefs[self._humanName]['willingness'] = np.clip(trustBeliefs[self._humanName]['willingness'] * (1-trustChangeValue), 0, 1)
+                    self.decisionDistance = None
+                    self.waitingForDecisionResponse = False
+
+                receivedMessages.remove(message)
+
+
+            if 'Remove together' in message:   
+                if self.waitingForDecisionResponse:                         # We can collaborate and you want to collaborate
+                    trustChangeValue = 15/100 if "close" in self.decisionDistance else 20/100 
+                    trustBeliefs[self._humanName]['willingness'] = np.clip(trustBeliefs[self._humanName]['willingness'] * (1+trustChangeValue), 0, 1)
+                    self.decisionDistance = None
+                    self.waitingForDecisionResponse = False
+
+                receivedMessages.remove(message)
+
+
+            if 'Remove' in message:                                         # Only good option if we cannot work togheter
+                receivedMessages.remove(message)
+                self.waitingForDecisionResponse = False
+
+        '''
+        for member in self._teamMembers:                                                            # TO DO: useless for loop
             for message in self._sendMessages:
+
+                # reduce 20% of the competence score for misscommunication of victims
+                if 'because I searched the whole area without finding' in message:                  # subtract the same competence for critical and normal?
+                    trustBeliefs.updateCompetence(-20/100)
+                    self._sendMessages.remove(message)   
+                
+                # add 15% of the competence score for helpfull communication of victims
+                if 'because you told me' in message and 'was located here' in message:
+                    trustBeliefs.updateWillingness(15/100)
+                    self._sendMessages.remove(message)   
+
+                if 'blocking area' in message and 'Please decide whether to' in message:
+                    self.waitingForDecisionResponse = True
+                    self.decisionDistance = message.split('distance between us:')[1]  
+                    self._sendMessages.remove(message)      
 
                 # The human has asked help to remove something but the human could also have done itself,
                 # however the human has not lied about the obstacle
@@ -1059,17 +1125,35 @@ class BaselineAgent(ArtificialBrain):
         '''
         # Update the trust value based on for example the received messages
         for message in receivedMessages:
-
             # The human does not want the robot to rescue a victim
             if 'Continue' in message:
-                # trustBeliefs[self._humanName]['willingness'] -= np.clip(trustBeliefs[self._humanName]['willingness']/100 * 5, 0 , 1)
-                trustBeliefs.updateWillingness(-5/100)
-                print(trustBeliefs.trustBeliefs[self._humanName]['willingness'])
+                if self.waitingForDecisionResponse:                        # We can collaborate but you refused, reduce willingness
+                    trustChangeValue = 30/100 if "close" in self.decisionDistance else 20/100 
+                    trustBeliefs.updateWillingness(-trustChangeValue)
+                    self.decisionDistance = None
+                    self.waitingForDecisionResponse = False
+                else:
+                    trustBeliefs.updateWillingness(-5/100)
+
+            if 'Remove alone' in message:
+                if self.waitingForDecisionResponse:                        # We can collaborate but you decided you do not want to help
+                    trustChangeValue = 20/100 if "close" in self.decisionDistance else 10/100 
+                    trustBeliefs.updateWillingness(-trustChangeValue)
+                    self.decisionDistance = None
+                    self.waitingForDecisionResponse = False
+
+                receivedMessages.remove(message)
 
             # The human is willing to help the robot
             if 'Remove together' in message:
                 # trustBeliefs[self._humanName]['willingness'] += np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0 , 1)
-                trustBeliefs.updateWillingness(15/100)
+                if self.waitingForDecisionResponse:                         # We can collaborate and you want to collaborate
+                    trustChangeValue = 15/100 if "close" in self.decisionDistance else 20/100 
+                    trustBeliefs.updateWillingness(trustChangeValue)
+                    self.decisionDistance = None
+                    self.waitingForDecisionResponse = False
+                else:
+                    trustBeliefs.updateWillingness(15/100)
 
             # The human is willing to help the robot rescue a mildly injured victim
             if 'Rescue together' in message and self._goalVic and 'mild' in self._goalVic:
@@ -1080,6 +1164,10 @@ class BaselineAgent(ArtificialBrain):
             if 'Rescue' in message and self._goalVic and 'critical' in self._goalVic:
                 # trustBeliefs[self._humanName]['willingness'] += np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0 , 1)
                 trustBeliefs.updateWillingness(15/100)
+
+            if 'Remove' in message:                                                 # Only good option if we cannot work togheter
+                receivedMessages.remove(message)
+                self.waitingForDecisionResponse = False
 
             # Increase agent trust in a team member that rescued a victim
             #if 'Collect' in message:
