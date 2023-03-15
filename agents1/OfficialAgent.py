@@ -46,7 +46,7 @@ class BaselineAgent(ArtificialBrain):
         self._phase = Phase.INTRO
         self._roomVics = []
         self._searchedRooms = []
-        self._foundVictims = []         # found and saved   TODO Q&A
+        self._foundVictims = []         # found and saved
         self._collectedVictims = []
         self._foundVictimLocs = {}
         self._sendMessages = []
@@ -60,7 +60,7 @@ class BaselineAgent(ArtificialBrain):
         self._distanceHuman = None
         self._distanceDrop = None
         self._agentLoc = None
-        self._todo = []                 # Victims found but not saved TODO Q&A
+        self._todo = []                 # Victims found but not saved
         self._answered = False
         self._tosearch = []
         self._carrying = False
@@ -91,7 +91,8 @@ class BaselineAgent(ArtificialBrain):
     def get_trust(self, trustBeliefs):
         competence = (trustBeliefs[self._humanName]["competence"] + 1) / 2
         willingness = (trustBeliefs[self._humanName]["willingness"] + 1) / 2
-        return competence * willingness
+        trust = competence * willingness
+        return np.random.choice([0, 1], 1, p=[1-trust, trust])
         
 
     def decide_on_actions(self, state):
@@ -229,7 +230,7 @@ class BaselineAgent(ArtificialBrain):
                         # ------------
                         # TODO
                         # Rescue alone if the victim is mildly injured and the human not weak
-                        if 'mild' in vic and self._condition!='weak':   # TODO Q&A: this is odd. Why not together when condition !- weak? it's about the human condition namely
+                        if 'mild' in vic and self._condition!='weak':
                             self._rescue = 'alone'
                         # Plan path to victim because the exact location is known (i.e., the agent found this victim)
                         if 'location' in self._foundVictimLocs[vic].keys():
@@ -251,7 +252,6 @@ class BaselineAgent(ArtificialBrain):
                                    and 'Door' in room['class_inheritance']
                                    and room['room_name'] not in self._searchedRooms
                                    and room['room_name'] not in self._tosearch]
-                # TODO, maybe we need to adjust trust here
                 # If all areas have been searched but the task is not finished, start searching areas again
                 if self._remainingZones and len(unsearchedRooms) == 0:
                     self._tosearch = []
@@ -300,15 +300,15 @@ class BaselineAgent(ArtificialBrain):
                 self._phase = Phase.FOLLOW_PATH_TO_ROOM
 
             if Phase.FOLLOW_PATH_TO_ROOM == self._phase:
-                # Find the next victim to rescue if the previously identified target victim was rescued by the human    # TODO, but is the human capable?
+                # Find the next victim to rescue if the previously identified target victim was rescued by the human    # TODO, but is the human competent?
                 if self._goalVic and self._goalVic in self._collectedVictims:
                     self._currentDoor = None
                     self._phase = Phase.FIND_NEXT_GOAL
                 # Identify which area to move to because the human found the previously identified target victim    # TODO but isn't this the same as first if condition of PLAN_PATH_TO_ROOM? Is this about finding a victim in a different room than we thought?
-                if self._goalVic and self._goalVic in self._foundVictims and self._door['room_name'] != self._foundVictimLocs[self._goalVic]['room']:
+                if self._goalVic and self._goalVic in self._foundVictims and self._door['room_name'] != self._foundVictimLocs[self._goalVic]['room']: # TODO change trust
                     self._currentDoor = None
                     self._phase = Phase.FIND_NEXT_GOAL
-                # Identify the next area to search if the human already searched the previously identified area # TODO, is the human capable?
+                # Identify the next area to search if the human already searched the previously identified area # TODO, is the human competent?
                 if self._door['room_name'] in self._searchedRooms and self._goalVic not in self._foundVictims:
                     self._currentDoor = None
                     self._phase = Phase.FIND_NEXT_GOAL
@@ -360,12 +360,12 @@ class BaselineAgent(ArtificialBrain):
                         # Wait for the human to help removing the obstacle and remove the obstacle together
                         if self.received_messages_content and self.received_messages_content[-1] == 'Remove' or self._remove:
                             # if the human indicates to remove the obstacle (maybe he's lying -> competence check)
-                            if self.get_binary_competence(trustBeliefs):
+                            if self.get_binary_competence(trustBeliefs):    # TODO get_trust maybe? Can we check distance?
                                 if not self._remove:
                                     self._answered = True
                                 # Tell the human to come over and be idle untill human arrives if human is willing
                                 if not state[{'is_human_agent': True}]:
-                                    if self.get_binary_willingness(trustBeliefs):
+                                    if self.get_binary_willingness(trustBeliefs):   # TODO what if there are no rooms left?
                                         self._sendMessage('Please come to ' + str(self._door['room_name']) + ' to remove rock.','RescueBot')
                                         return None, {}
                                     else:
@@ -775,7 +775,7 @@ class BaselineAgent(ArtificialBrain):
                 if mssg.from_id == member:
                     receivedMessages[member].append(mssg.content)
         # Check the content of the received messages
-        for mssgs in receivedMessages.values():
+        for mssgs in receivedMessages.values():     # TODO remove messages afterwards
             for msg in mssgs:
                 # TODO is human willing or competent?
                 # If a received message involves team members searching areas, add these areas to the memory of areas that have been explored
