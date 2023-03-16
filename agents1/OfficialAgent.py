@@ -39,10 +39,12 @@ class Phase(enum.Enum):
 class TrustBelief:
     path = '/beliefs/allTrustBeliefs.csv'
     default = 0.5
+    basicChange = 0.5
     attributes = ['competence', 'willingness']
     def __init__(self, humanName, folder) -> None:
-        self.trustBeliefs = {}
         self.folder = folder
+        self.competence = 0
+        self.willingness = 0
         self.humanName = humanName
 
         trustfile_header = []
@@ -55,38 +57,35 @@ class TrustBelief:
                     continue
                 # Retrieve trust values
                 if row and row[0]==humanName:
-                    name = row[0]
-                    self.trustBeliefs[name] = {}
-                    for i in range(len(TrustBelief.attributes)):
-                        self.trustBeliefs[name][TrustBelief.attributes[i]] = float(row[i + 1])
+                    self.competence = float(row[1])
+                    self.willingness = float(row[2])
 
                 # Initialize default trust values
                 if row and row[0]!=self.humanName:
-                    self.trustBeliefs[self.humanName] = {}
-                    for i in range(len(TrustBelief.attributes)):
-                        self.trustBeliefs[self.humanName][TrustBelief.attributes[i]] = TrustBelief.default
+                    self.competence = TrustBelief.default
+                    self.willingness = TrustBelief.default
     
     def get_binary_willingness(self):
-        willingness = (self.trustBeliefs[self.humanName]["willingness"] + 1) / 2
+        willingness = (self.willingness + 1) / 2
         return np.random.choice([0, 1], 1, p=[1-willingness, willingness])
     
     
     def get_binary_competence(self):
-        competence = (self.trustBeliefs[self.humanName]["competence"] + 1) / 2
+        competence = (self.competence + 1) / 2
         return np.random.choice([0, 1], 1, p=[1-competence, competence])
     
     def get_trust(self):
-        competence = (self.trustBeliefs[self.humanName]["competence"] + 1) / 2
-        willingness = (self.trustBeliefs[self.humanName]["willingness"] + 1) / 2
+        competence = (self.competence + 1) / 2
+        willingness = (self.willingness + 1) / 2
         return True
 
     def updateCompetence(self, percent, withFlush = False):
-        self.trustBeliefs[self.humanName]['competence']+=np.clip(self.trustBeliefs[self.humanName]['competence'] * percent, -1, 1)
+        self.competence = np.clip(self.competence + TrustBelief.basicChange * percent, -1, 1)
         if withFlush:
             self.flushUpdates()
     
     def updateWillingness(self, percent, withFlush = False):
-        self.trustBeliefs[self.humanName]['willingness']+=np.clip(self.trustBeliefs[self.humanName]['willingness'] * percent, -1, 1)
+        self.willingness = np.clip(self.willingness + TrustBelief.basicChange * percent, -1, 1)
         if withFlush:
             self.flushUpdates()
 
@@ -94,7 +93,7 @@ class TrustBelief:
         with open(self.folder + TrustBelief.path, mode='w') as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             csv_writer.writerow(['name','competence','willingness'])
-            csv_writer.writerow([self.humanName,self.trustBeliefs[self.humanName]['competence'],self.trustBeliefs[self.humanName]['willingness']])
+            csv_writer.writerow([self.humanName,self.competence,self.willingness])
 
 
 class BaselineAgent(ArtificialBrain):
@@ -144,21 +143,8 @@ class BaselineAgent(ArtificialBrain):
     def filter_observations(self, state):
         # Filtering of the world state before deciding on an action
         return state
-
-    def get_binary_willingness(self, trustBeliefs):
-        willingness = (trustBeliefs[self._humanName]["willingness"] + 1) / 2
-        return np.random.choice([0, 1], 1, p=[1-willingness, willingness])
-    
-    def get_binary_competence(self, trustBeliefs):
-        competence = (trustBeliefs[self._humanName]["competence"] + 1) / 2
-        return np.random.choice([0, 1], 1, p=[1-competence, competence])
-    
-    def get_trust(self, trustBeliefs):
-        competence = (trustBeliefs[self._humanName]["competence"] + 1) / 2
-        willingness = (trustBeliefs[self._humanName]["willingness"] + 1) / 2
-        return competence * willingness
         
-    aux = 0
+    counter = 0
     def decide_on_actions(self, state):
         # Identify team members
         agent_name = state[self.agent_id]['obj_id']
@@ -166,10 +152,7 @@ class BaselineAgent(ArtificialBrain):
             if member != agent_name and member not in self._teamMembers:
                 self._teamMembers.append(member)
         
-        # if BaselineAgent.aux % 30 == 0:
-        #     print(self._receivedMessages)
-        #     print([mssg.content for mssg in self.received_messages if mssg.from_id == "matei"])
-        # BaselineAgent.aux += 1
+        
         # print(BaselineAgent.aux)
         # Create a list of received messages from the human team member
         for mssg in self.received_messages:
@@ -188,6 +171,11 @@ class BaselineAgent(ArtificialBrain):
         self._processMessages(state, self._teamMembers, self._condition, trustBeliefs)
         self._trustBelief(self._teamMembers, trustBeliefs, self._folder, self._receivedMessages)
         
+        if BaselineAgent.counter % 30 == 0: # printing every 30 iterations how the competence and willingness are evolving
+            print('competence ' + str(trustBeliefs.competence))
+            print('willingness ' + str(trustBeliefs.willingness))
+        BaselineAgent.counter += 1
+
         # reset messages to no new ones after processing them
         self.received_messages = []
         self._receivedMessages = []
@@ -1021,36 +1009,6 @@ class BaselineAgent(ArtificialBrain):
 
             trustBeliefs.flushUpdates()
 
-
-    def _loadBelief(self, members, folder):
-        '''
-        Loads trust belief values if agent already collaborated with human before, otherwise trust belief values are initialized using default values.
-        '''
-        # Create a dictionary with trust values for all team members
-        trustBeliefs = {}
-        # Set a default starting trust value
-        default = 0.5
-        trustfile_header = []
-        trustfile_contents = []
-        # Check if agent already collaborated with this human before, if yes: load the corresponding trust values, if no: initialize using default trust values
-        with open(folder+'/beliefs/allTrustBeliefs.csv') as csvfile:
-            reader = csv.reader(csvfile, delimiter=';', quotechar="'")
-            for row in reader:
-                if trustfile_header==[]:
-                    trustfile_header=row
-                    continue
-                # Retrieve trust values
-                if row and row[0]==self._humanName:
-                    name = row[0]
-                    competence = float(row[1])
-                    willingness = float(row[2])
-                    trustBeliefs[name] = {'competence': competence, 'willingness': willingness}
-                # Initialize default trust values
-                if row and row[0]!=self._humanName:
-                    competence = default
-                    willingness = default
-                    trustBeliefs[self._humanName] = {'competence': competence, 'willingness': willingness}
-        return trustBeliefs
 
     def _trustBelief(self, members, trustBeliefs: TrustBelief, folder, receivedMessages):
         '''
