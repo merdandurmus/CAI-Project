@@ -77,7 +77,8 @@ class TrustBelief:
     def get_trust(self):
         competence = (self.competence + 1) / 2
         willingness = (self.willingness + 1) / 2
-        return True
+        trust = (competence + willingness) / 2
+        return np.random.choice([0, 1], 1, p=[1-trust, trust])
 
     def updateCompetence(self, percent, withFlush = False):
         self.competence = np.clip(self.competence + TrustBelief.basicChange * percent, -1, 1)
@@ -150,7 +151,7 @@ class BaselineAgent(ArtificialBrain):
         # Filtering of the world state before deciding on an action
         return state
         
-    counter = 0
+    print_counter = 0
     def decide_on_actions(self, state):
         # Identify team members
         agent_name = state[self.agent_id]['obj_id']
@@ -177,10 +178,10 @@ class BaselineAgent(ArtificialBrain):
         self._processMessages(state, self._teamMembers, self._condition, trustBeliefs)
         self._trustBelief(self._teamMembers, trustBeliefs, self._folder, self._receivedMessages)
         
-        if BaselineAgent.counter % 30 == 0: # printing every 30 iterations how the competence and willingness are evolving
+        if BaselineAgent.print_counter % 30 == 0: # printing every 30 iterations how the competence and willingness are evolving
             print('competence ' + str(trustBeliefs.competence))
             print('willingness ' + str(trustBeliefs.willingness))
-        BaselineAgent.counter += 1
+        BaselineAgent.print_counter += 1
 
         # reset messages to no new ones after processing them
         self.received_messages = []
@@ -553,11 +554,6 @@ class BaselineAgent(ArtificialBrain):
                                     return None, {}
 
                                 # Tell the human to remove the obstacle when he/she arrives
-                                if state[{'is_human_agent': True}]:  # (TODO maybe not check willingsness as the human has already arrived, we can have a counter instead to check whether removing is being done or not)
-                                        self._sendMessage('Lets remove stones blocking ' + str(self._door['room_name']) + '!','RescueBot')
-                                        return None, {}
-                                self._nr_skipped_action = 0
-                                    
                                 if state[{'is_human_agent': True}]:
                                     self._sendMessage('Lets remove stones blocking ' + str(self._door['room_name']) + '!','RescueBot')
                                     return None, {}
@@ -597,7 +593,7 @@ class BaselineAgent(ArtificialBrain):
                     self._currentDoor = None
                     self._phase = Phase.FIND_NEXT_GOAL
                 # If the human searched the same area, plan searching another area instead
-                if self._door['room_name'] in self._searchedRooms and self._goalVic not in self._foundVictims:  # TODO, but is the human capable? we can do it here or when adding to searchedRooms
+                if self._door['room_name'] in self._searchedRooms and self._goalVic not in self._foundVictims:
                     self._currentDoor = None
                     self._phase = Phase.FIND_NEXT_GOAL
                 # Otherwise, enter the area and plan to search it
@@ -930,7 +926,7 @@ class BaselineAgent(ArtificialBrain):
                 if mssg.from_id == member:
                     receivedMessages[member].append(mssg.content)
         # Check the content of the received messages
-        for mssgs in receivedMessages.values():
+        for mssgs in receivedMessages.values():     # TODO remove messages afterwards. Needed?
             for msg in mssgs:
                 # -----------------
                 # If a received message involves team members searching areas, add these areas to the memory of areas that have been explored, if the human is trustworthy (both competent and willing)
