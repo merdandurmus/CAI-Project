@@ -452,6 +452,7 @@ class BaselineAgent(ArtificialBrain):
                         # ------------------
                         elif self.received_messages_content and self.received_messages_content[-1] == 'Remove' or self._remove:
                             # if the human indicates to remove the obstacle, remove with help if trustworthy or if no other victims left
+                            self._waiting = False
                             if len(self._remainingZones) > 1 or self._nr_skipped_action >= self._max_allowed_skips or trustBeliefs.get_trust():
                                 if not self._remove:
                                     self._answered = True
@@ -470,13 +471,15 @@ class BaselineAgent(ArtificialBrain):
                                 self._phase = Phase.FIND_NEXT_GOAL
                                 break
                         # Remain idle untill the human communicates what to do with the identified obstacle
-                        else:
+                        elif self._waiting:
                             if datetime.now().timestamp() - self._timeStartedWaiting.timestamp() > 10:
                                 trustBeliefs.updateCompetence(-15/100, True)
                                 self._sendMessage("I've waited too long, I am continuing", 'RescueBot')
                                 self._overrideContinue = True
                                 self._nr_skipped_action = 0
 
+                            return None, {}
+                        else:
                             return None, {}
                         # ------------------
 
@@ -499,6 +502,7 @@ class BaselineAgent(ArtificialBrain):
                         # Remove the obstacle if the human tells the agent to do so
                         elif (self.received_messages_content and self.received_messages_content[-1] == 'Remove' or self._remove) or self._overrideRemoveAlone:
                             self._overrideRemoveAlone = False
+                            self._waiting = False
                             if not self._remove:
                                 self._answered = True
                                 self._waiting = False
@@ -509,11 +513,13 @@ class BaselineAgent(ArtificialBrain):
                             self._remove = False
                             return RemoveObject.__name__, {'object_id': info['obj_id']}
                         # Remain idle untill the human communicates what to do with the identified obstacle
-                        else:
+                        elif self._waitinig:
                             if datetime.now().timestamp() - self._timeStartedWaiting.timestamp() > 10:
                                 trustBeliefs.updateCompetence(-15/100, True)
                                 self._sendMessage("I've waited too long, I am removing the tree", 'RescueBot')
                                 self._overrideRemoveAlone = True
+                            return None, {}
+                        else:
                             return None, {}
 
                     if 'class_inheritance' in info and 'ObstacleObject' in info['class_inheritance'] and 'stone' in info['obj_id']:
@@ -545,6 +551,7 @@ class BaselineAgent(ArtificialBrain):
                         # --------------
                         elif self.received_messages_content and self.received_messages_content[-1] == 'Remove together' or self._remove:
                             # if the human indicates to remove the obstacle, remove with help if trustworthy or if no other victims left
+                            self._waiting = False
                             if len(self._remainingZones) > 1 or self._nr_skipped_action >= self._max_allowed_skips or trustBeliefs.get_trust():
                                 if not self._remove:
                                     self._answered = True
@@ -568,11 +575,13 @@ class BaselineAgent(ArtificialBrain):
                                 self._remove = False
                                 return RemoveObject.__name__, {'object_id': info['obj_id']}
                         # Remain idle until the human communicates what to do with the identified obstacle  # TODO what if we wait too long
-                        else:
+                        elif self._waiting:
                             if datetime.now().timestamp() - self._timeStartedWaiting.timestamp() > 10:
                                 trustBeliefs.updateCompetence(-15/100, True)
                                 self._sendMessage("I've waited too long, I am removing the stone", 'RescueBot')
                                 self._overrideRemoveAlone = True
+                            return None, {}
+                        else:
                             return None, {}
                         # --------------
                 # If no obstacles are blocking the entrance, enter the area
