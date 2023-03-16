@@ -266,6 +266,7 @@ class BaselineAgent(ArtificialBrain):
                         self._goalLoc = remaining[vic]
                         # Move to target victim
                         self._rescue = 'together'
+                        #TODO: Increase the willingness if the human actually comes to rescue a victim
                         self._sendMessage('Moving to ' + self._foundVictimLocs[vic]['room'] + ' to pick up ' + self._goalVic +'. Please come there as well to help me carry ' + self._goalVic + ' to the drop zone.', 'RescueBot')
                         # Plan path to victim because the exact location is known (i.e., the agent found this victim)
                         if 'location' in self._foundVictimLocs[vic].keys():
@@ -457,7 +458,7 @@ class BaselineAgent(ArtificialBrain):
                                 break
                         # Remain idle untill the human communicates what to do with the identified obstacle
                         else:
-                            if datetime.now().timestamp() - self._timeStartedWaiting.timestamp() > 10:
+                            if datetime.now().timestamp() - self._timeStartedWaiting.timestamp() > 20:
                                 trustBeliefs.updateCompetence(-15/100, True)
                                 self._sendMessage("I've waited too long, I am continuing", 'RescueBot')
                                 self._overrideContinue = True
@@ -493,7 +494,7 @@ class BaselineAgent(ArtificialBrain):
                             return RemoveObject.__name__, {'object_id': info['obj_id']}
                         # Remain idle untill the human communicates what to do with the identified obstacle
                         else:
-                            if datetime.now().timestamp() - self._timeStartedWaiting.timestamp() > 10:
+                            if datetime.now().timestamp() - self._timeStartedWaiting.timestamp() > 20:
                                 trustBeliefs.updateCompetence(-15/100, True)
                                 self._sendMessage("I've waited too long, I am removing the tree", 'RescueBot')
                                 self._overrideRemoveAlone = True
@@ -567,7 +568,7 @@ class BaselineAgent(ArtificialBrain):
                                 return RemoveObject.__name__, {'object_id': info['obj_id']}
                         # Remain idle until the human communicates what to do with the identified obstacle
                         else:
-                            if datetime.now().timestamp() - self._timeStartedWaiting.timestamp() > 10:
+                            if datetime.now().timestamp() - self._timeStartedWaiting.timestamp() > 20:
                                 trustBeliefs.updateCompetence(-15/100, True)
                                 self._sendMessage("I've waited too long, I am removing the stone", 'RescueBot')
                                 self._overrideRemoveAlone = True
