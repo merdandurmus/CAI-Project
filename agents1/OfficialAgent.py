@@ -1029,14 +1029,14 @@ class BaselineAgent(ArtificialBrain):
         return trustBeliefs
 
     def _trustBelief(self, members, trustBeliefs: TrustBelief, folder, receivedMessages):
-    '''
-        TO DO ( Vlad ):
-            -> [BUG] some removal have "Remove togheter", some do not, handle this
-        OBSERVATIONS ( Vlad ):
-            ->Trust is much harder to gain than to lose as mistakes cost more time than 
-                we benefit if we collaborate ( one mistakes still weight more than one right action ) 
-            ->Willingness can be wierd because there might be motive behind it, but not enough time/methods to communicate it
         '''
+            TO DO ( Vlad ):
+                -> [BUG] some removal have "Remove togheter", some do not, handle this
+            OBSERVATIONS ( Vlad ):
+                ->Trust is much harder to gain than to lose as mistakes cost more time than 
+                    we benefit if we collaborate ( one mistakes still weight more than one right action ) 
+                ->Willingness can be wierd because there might be motive behind it, but not enough time/methods to communicate it
+    `    '''
 
        
         # Update the trust value based on for example the received messages
