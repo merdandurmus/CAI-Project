@@ -82,11 +82,13 @@ class TrustBelief:
 
     def updateCompetence(self, percent, withFlush = False):
         self.competence = np.clip(self.competence + TrustBelief.basicChange * percent, -1, 1)
+        self.competence = 1
         if withFlush:
             self.flushUpdates()
     
     def updateWillingness(self, percent, withFlush = False):
-        self.willingness = np.clip(self.willingness + TrustBelief.basicChange * percent, -1, 1)
+        #self.willingness = np.clip(self.willingness + TrustBelief.basicChange * percent, -1, 1)
+        self.willingness = 1
         if withFlush:
             self.flushUpdates()
 
