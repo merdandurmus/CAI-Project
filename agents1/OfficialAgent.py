@@ -38,13 +38,13 @@ class Phase(enum.Enum):
 
 class TrustBelief:
     path = '/beliefs/allTrustBeliefs.csv'
-    default = 0.5
+    default = 1.0
     basicChange = 0.5
     attributes = ['competence', 'willingness']
     def __init__(self, humanName, folder) -> None:
         self.folder = folder
-        self.competence = 0
-        self.willingness = 0
+        self.competence = 1.0
+        self.willingness = 1.0
         self.humanName = humanName
 
         trustfile_header = []
@@ -453,7 +453,7 @@ class BaselineAgent(ArtificialBrain):
                         # ------------------
                         elif self.received_messages_content and self.received_messages_content[-1] == 'Remove' or self._remove:
                             # if the human indicates to remove the obstacle, remove with help if trustworthy or if no other victims left
-                            self._waiting = False
+                            self._timeStartedWaiting = datetime.now()
                             if len(self._remainingZones) > 1 or self._nr_skipped_action >= self._max_allowed_skips or trustBeliefs.get_trust():
                                 if not self._remove:
                                     self._answered = True
@@ -550,7 +550,7 @@ class BaselineAgent(ArtificialBrain):
                         # --------------
                         elif self.received_messages_content and self.received_messages_content[-1] == 'Remove together' or self._remove:
                             # if the human indicates to remove the obstacle, remove with help if trustworthy or if no other victims left
-                            self._waiting = False
+                            self._timeStartedWaiting = datetime.now()
                             if len(self._remainingZones) > 1 or self._nr_skipped_action >= self._max_allowed_skips or trustBeliefs.get_trust():
                                 if not self._remove:
                                     self._answered = True
@@ -748,6 +748,7 @@ class BaselineAgent(ArtificialBrain):
                     self._rescue = 'together'
                     self._answered = True
                     self._waiting = False
+                    self._timeStartedWaiting = datetime.now()
                     # Tell the human to come over and help carry the critically injured victim
                     if not state[{'is_human_agent': True}]:
                         self._sendMessage('Please come to ' + str(self._door['room_name']) + ' to carry ' + str(self._recentVic) + ' together.', 'RescueBot')
@@ -757,20 +758,7 @@ class BaselineAgent(ArtificialBrain):
                     self._goalVic = self._recentVic
                     self._recentVic = None
                     self._phase = Phase.PLAN_PATH_TO_VICTIM
-                # Make a plan to rescue a found mildly injured victim together if the human decides so
-                if self.received_messages_content and self.received_messages_content[-1] == 'Rescue together' and 'mild' in self._recentVic:
-                    self._rescue = 'together'
-                    self._answered = True
-                    self._waiting = False
-                    # Tell the human to come over and help carry the mildly injured victim
-                    if not state[{'is_human_agent': True}]:
-                        self._sendMessage('Please come to ' + str(self._door['room_name']) + ' to carry ' + str(self._recentVic) + ' together.', 'RescueBot')
-                    # Tell the human to carry the mildly injured victim together
-                    if state[{'is_human_agent': True}]:
-                        self._sendMessage('Lets carry ' + str(self._recentVic) + ' together! Please wait until I moved on top of ' + str(self._recentVic) + '.', 'RescueBot')
-                    self._goalVic = self._recentVic
-                    self._recentVic = None
-                    self._phase = Phase.PLAN_PATH_TO_VICTIM
+
                 # Make a plan to rescue the mildly injured victim alone if the human decides so, and communicate this to the human
                 if (self.received_messages_content and self.received_messages_content[-1] == 'Rescue alone' or self._overrideRescueAlone) and 'mild' in self._recentVic:
                     self._sendMessage('Picking up ' + self._recentVic + ' in ' + self._door['room_name'] + '.','RescueBot')
@@ -783,6 +771,23 @@ class BaselineAgent(ArtificialBrain):
                     self._goalLoc = self._remaining[self._goalVic]
                     self._recentVic = None
                     self._phase = Phase.PLAN_PATH_TO_VICTIM
+                
+                # Make a plan to rescue a found mildly injured victim together if the human decides so
+                if self.received_messages_content and self.received_messages_content[-1] == 'Rescue together' and 'mild' in self._recentVic:
+                    self._rescue = 'together'
+                    self._answered = True
+                    self._waiting = False
+                    self._timeStartedWaiting = datetime.now()
+                    # Tell the human to come over and help carry the mildly injured victim
+                    if not state[{'is_human_agent': True}]:
+                        self._sendMessage('Please come to ' + str(self._door['room_name']) + ' to carry ' + str(self._recentVic) + ' together.', 'RescueBot')
+                    # Tell the human to carry the mildly injured victim together
+                    if state[{'is_human_agent': True}]:
+                        self._sendMessage('Lets carry ' + str(self._recentVic) + ' together! Please wait until I moved on top of ' + str(self._recentVic) + '.', 'RescueBot')
+                    self._goalVic = self._recentVic
+                    self._recentVic = None
+                    self._phase = Phase.PLAN_PATH_TO_VICTIM
+
                     # -------------
                 # Continue searching other areas if the human decides so
                 if (self.received_messages_content and self.received_messages_content[-1] == 'Continue') or self._overrideContinue:
@@ -848,6 +853,11 @@ class BaselineAgent(ArtificialBrain):
                         objects.append(info)
                         # Remain idle when the human has not arrived at the location
                         if not self._humanName in info['name']:
+                            if datetime.now().timestamp() - self._timeStartedWaiting.timestamp() >= self._max_wait_time:
+                                trustBeliefs.updateCompetence(-15/100, True)
+                                self._waiting = False
+                                self._phase = Phase.FIND_NEXT_GOAL
+                                return None, {}
                             self._waiting = True
                             self._moving = False
                             return None, {}
