@@ -141,7 +141,7 @@ class BaselineAgent(ArtificialBrain):
         self._overrideRemoveAlone = False
         self._timeStartedWaiting = datetime.now()
         self.waitingForDecisionResponse = False
-        self._max_wait_time = 120
+        self._max_wait_time = 30
 
     def initialize(self):
         # Initialization of the state tracker and navigation algorithm
