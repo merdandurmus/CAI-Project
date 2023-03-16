@@ -134,6 +134,7 @@ class BaselineAgent(ArtificialBrain):
         self._overrideContinue = False
         self._overrideRemoveAlone = False
         self._timeStartedWaiting = datetime.now()
+        self.waitingForDecisionResponse = False
 
     def initialize(self):
         # Initialization of the state tracker and navigation algorithm
@@ -1112,7 +1113,7 @@ class BaselineAgent(ArtificialBrain):
                 trustBeliefs.updateWillingness(15/100)
 
             if 'Remove' in message:                                                 # Only good option if we cannot work togheter
-                receivedMessages.remove(message)
+                #receivedMessages.remove(message)
                 self.waitingForDecisionResponse = False
 
             # Increase agent trust in a team member that rescued a victim
