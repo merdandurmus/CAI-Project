@@ -43,8 +43,8 @@ class TrustBelief:
     attributes = ['competence', 'willingness']
     def __init__(self, humanName, folder) -> None:
         self.folder = folder
-        self.competence = 0
-        self.willingness = 0
+        self.competence = 1
+        self.willingness = 1
         self.humanName = humanName
 
         trustfile_header = []
