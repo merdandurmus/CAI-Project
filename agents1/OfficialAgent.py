@@ -141,6 +141,7 @@ class BaselineAgent(ArtificialBrain):
         self._overrideRemoveAlone = False
         self._timeStartedWaiting = datetime.now()
         self.waitingForDecisionResponse = False
+        self._max_wait_time = 120
 
     def initialize(self):
         # Initialization of the state tracker and navigation algorithm
@@ -472,9 +473,8 @@ class BaselineAgent(ArtificialBrain):
                                 break
                         # Remain idle untill the human communicates what to do with the identified obstacle
                         elif self._waiting:
-                            if datetime.now().timestamp() - self._timeStartedWaiting.timestamp() > 10:
+                            if datetime.now().timestamp() - self._timeStartedWaiting.timestamp() > self._max_wait_time:
                                 trustBeliefs.updateCompetence(-15/100, True)
-                                self._sendMessage("I've waited too long, I am continuing", 'RescueBot')
                                 self._overrideContinue = True
                                 self._nr_skipped_action = 0
 
@@ -513,10 +513,9 @@ class BaselineAgent(ArtificialBrain):
                             self._remove = False
                             return RemoveObject.__name__, {'object_id': info['obj_id']}
                         # Remain idle untill the human communicates what to do with the identified obstacle
-                        elif self._waitinig:
-                            if datetime.now().timestamp() - self._timeStartedWaiting.timestamp() > 10:
+                        elif self._waiting:
+                            if datetime.now().timestamp() - self._timeStartedWaiting.timestamp() > self._max_wait_time:
                                 trustBeliefs.updateCompetence(-15/100, True)
-                                self._sendMessage("I've waited too long, I am removing the tree", 'RescueBot')
                                 self._overrideRemoveAlone = True
                             return None, {}
                         else:
@@ -576,9 +575,8 @@ class BaselineAgent(ArtificialBrain):
                                 return RemoveObject.__name__, {'object_id': info['obj_id']}
                         # Remain idle until the human communicates what to do with the identified obstacle  # TODO what if we wait too long
                         elif self._waiting:
-                            if datetime.now().timestamp() - self._timeStartedWaiting.timestamp() > 10:
+                            if datetime.now().timestamp() - self._timeStartedWaiting.timestamp() > self._max_wait_time:
                                 trustBeliefs.updateCompetence(-15/100, True)
-                                self._sendMessage("I've waited too long, I am removing the stone", 'RescueBot')
                                 self._overrideRemoveAlone = True
                             return None, {}
                         else:
@@ -796,13 +794,11 @@ class BaselineAgent(ArtificialBrain):
                     self._phase = Phase.FIND_NEXT_GOAL
                 # Remain idle untill the human communicates to the agent what to do with the found victim
                 if self.received_messages_content and self._waiting and self.received_messages_content[-1] != 'Rescue' and self.received_messages_content[-1] != 'Continue':
-                    if datetime.now().timestamp() - self._timeStartedWaiting.timestamp() >= 10:
+                    if datetime.now().timestamp() - self._timeStartedWaiting.timestamp() >= self._max_wait_time:
                         trustBeliefs.updateCompetence(-15/100, True)
                         if 'mild' in self._recentVic:
-                            self._sendMessage("I've waited too long, I am rescuing this one alone", 'RescueBot')
                             self._overrideRescueAlone = True
                         elif 'critical' in self._recentVic:
-                            self._sendMessage("I've waited too long, I am skipping this one", 'RescueBot')
                             self._overrideContinue = True
                     return None, {}
                 # Find the next area to search when the agent is not waiting for an answer from the human or occupied with rescuing a victim
