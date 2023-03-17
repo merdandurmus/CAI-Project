@@ -3,6 +3,8 @@ import sys
 import csv
 import glob
 import pathlib
+import time
+
 from SaR_gui import visualization_server
 from worlds1.WorldBuilder import create_builder
 from pathlib import Path
@@ -31,10 +33,17 @@ if __name__ == "__main__":
     vis_thread = visualization_server.run_matrx_visualizer(verbose=False, media_folder=media_folder)
     world = builder.get_world()
     print("Started world...")
+
+    start = time.time()
+
     builder.api_info['matrx_paused'] = False
     world.run(builder.api_info)
     print("DONE!")
     print("Shutting down custom visualizer")
+    end = time.time()
+
+    print('Duration of the game: ' + str(end - start))
+
     r = requests.get("http://localhost:" + str(visualization_server.port) + "/shutdown_visualizer")
     vis_thread.join()
     if choice1=="official":

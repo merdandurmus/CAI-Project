@@ -43,8 +43,8 @@ class TrustBelief:
     attributes = ['competence', 'willingness']
     def __init__(self, humanName, folder) -> None:
         self.folder = folder
-        self.competence = 1.0
-        self.willingness = 1.0
+        self.competence = 0.5
+        self.willingness = 0.5
         self.humanName = humanName
 
         trustfile_header = []
@@ -66,17 +66,17 @@ class TrustBelief:
                     self.willingness = TrustBelief.default
     
     def get_binary_willingness(self):
-        willingness = (self.willingness + 1) / 2
+        willingness = 1 # (self.willingness + 1) / 2
         return np.random.choice([0, 1], 1, p=[1-willingness, willingness])
     
     
     def get_binary_competence(self):
-        competence = (self.competence + 1) / 2
+        competence = 1 # (self.competence + 1) / 2
         return np.random.choice([0, 1], 1, p=[1-competence, competence])
     
     def get_trust(self):
-        competence = (self.competence + 1) / 2
-        willingness = (self.willingness + 1) / 2
+        competence = 1 # (self.competence + 1) / 2
+        willingness = 1 # (self.willingness + 1) / 2
         trust = (competence + willingness) / 2
         return np.random.choice([0, 1], 1, p=[1-trust, trust])
 
@@ -179,10 +179,10 @@ class BaselineAgent(ArtificialBrain):
         self._processMessages(state, self._teamMembers, self._condition, trustBeliefs)
         self._trustBelief(self._teamMembers, trustBeliefs, self._folder, self._receivedMessages)
         
-        if BaselineAgent.print_counter % 30 == 0: # printing every 30 iterations how the competence and willingness are evolving
-            print('competence ' + str(trustBeliefs.competence))
-            print('willingness ' + str(trustBeliefs.willingness))
-        BaselineAgent.print_counter += 1
+        #if BaselineAgent.print_counter % 30 == 0: # printing every 30 iterations how the competence and willingness are evolving
+            #print('competence ' + str(trustBeliefs.competence))
+            #print('willingness ' + str(trustBeliefs.willingness))
+        #BaselineAgent.print_counter += 1
 
         # reset messages to no new ones after processing them
         self.received_messages = []
@@ -275,7 +275,7 @@ class BaselineAgent(ArtificialBrain):
                         if "critical" in vic:
                             self._rescue = 'together'
                         if "mild" in vic:
-                            if trustBeliefs.get_binary_willingness():
+                            if trustBeliefs.get_binary_willingness(): # TODO: The function returns a value right? Not a bool!
                                 self._rescue = "together"
                             else:
                                 self._rescue = "alone"
@@ -1056,17 +1056,26 @@ class BaselineAgent(ArtificialBrain):
             # reduce 20% of the competence score for misscommunication of victims
             if 'because I searched the whole area without finding' in message:                  # subtract the same competence for critical and normal?
                 trustBeliefs.updateCompetence(-20/100)
-                self._sendMessages.remove(message)   
+                self._sendMessages.remove(message)
+                print('sendMessages ' + message)
+                print('competence ' + str(trustBeliefs.competence))
+                print('willingness ' + str(trustBeliefs.willingness))
             
             # add 15% of the competence score for helpfull communication of victims
             if 'because you told me' in message and 'was located here' in message:
                 trustBeliefs.updateWillingness(15/100)
-                self._sendMessages.remove(message)   
+                self._sendMessages.remove(message)
+                print('sendMessages ' + message)
+                print('competence ' + str(trustBeliefs.competence))
+                print('willingness ' + str(trustBeliefs.willingness))
 
             if 'blocking area' in message and 'Please decide whether to' in message:
                 self.waitingForDecisionResponse = True
                 self.decisionDistance = message.split('distance between us:')[1]  
-                self._sendMessages.remove(message)      
+                self._sendMessages.remove(message)
+                print('sendMessages ' + message)
+                print('competence ' + str(trustBeliefs.competence))
+                print('willingness ' + str(trustBeliefs.willingness))
 
             # The human has asked help to remove something but the human could also have done itself,
             # however the human has not lied about the obstacle
@@ -1074,8 +1083,11 @@ class BaselineAgent(ArtificialBrain):
                 # trustBeliefs[self._humanName]['competence']+= np.clip(trustBeliefs[self._humanName]['competence']/100 * 15, 0, 1)
                 # trustBeliefs[self._humanName]['willingness']-= np.clip(trustBeliefs[self._humanName]['willingness']/100 * 10, 0, 1)
                 trustBeliefs.updateCompetence(15/100)
-                trustBeliefs.updateWillingness(-10/100)
+                trustBeliefs.updateWillingness(10/100)
                 self._sendMessages.remove(message)
+                print('sendMessages ' + message)
+                print('competence ' + str(trustBeliefs.competence))
+                print('willingness ' + str(trustBeliefs.willingness))
 
 
             # The human has lied about something since all the rooms have been
@@ -1084,6 +1096,9 @@ class BaselineAgent(ArtificialBrain):
                 # trustBeliefs[self._humanName]['competence'] -= np.clip(trustBeliefs[self._humanName]['competence']/100 * 25, 0, 1)
                 trustBeliefs.updateCompetence(-25/100)
                 self._sendMessages.remove(message)
+                print('sendMessages ' + message)
+                print('competence ' + str(trustBeliefs.competence))
+                print('willingness ' + str(trustBeliefs.willingness))
 
             # The human has asked help to remove something it could not do itself
             if 'Lets remove' in message:
@@ -1092,6 +1107,9 @@ class BaselineAgent(ArtificialBrain):
                 trustBeliefs.updateCompetence(15/100)
                 trustBeliefs.updateWillingness(15/100)
                 self._sendMessages.remove(message)
+                print('sendMessages ' + message)
+                print('competence ' + str(trustBeliefs.competence))
+                print('willingness ' + str(trustBeliefs.willingness))
 
 
         '''
@@ -1106,8 +1124,14 @@ class BaselineAgent(ArtificialBrain):
                     trustBeliefs.updateWillingness(-trustChangeValue)
                     self.decisionDistance = None
                     self.waitingForDecisionResponse = False
+                    print('receivedMessages ' + message)
+                    print('competence ' + str(trustBeliefs.competence))
+                    print('willingness ' + str(trustBeliefs.willingness))
                 else:
                     trustBeliefs.updateWillingness(-5/100)
+                    print('receivedMessages ' + message)
+                    print('competence ' + str(trustBeliefs.competence))
+                    print('willingness ' + str(trustBeliefs.willingness))
 
             if 'Remove alone' in message:
                 if self.waitingForDecisionResponse:                        # We can collaborate but you decided you do not want to help
@@ -1115,6 +1139,9 @@ class BaselineAgent(ArtificialBrain):
                     trustBeliefs.updateWillingness(-trustChangeValue)
                     self.decisionDistance = None
                     self.waitingForDecisionResponse = False
+                    print('receivedMessages ' + message)
+                    print('competence ' + str(trustBeliefs.competence))
+                    print('willingness ' + str(trustBeliefs.willingness))
 
                 receivedMessages.remove(message)
 
@@ -1126,22 +1153,37 @@ class BaselineAgent(ArtificialBrain):
                     trustBeliefs.updateWillingness(trustChangeValue)
                     self.decisionDistance = None
                     self.waitingForDecisionResponse = False
+                    print('receivedMessages ' + message)
+                    print('competence ' + str(trustBeliefs.competence))
+                    print('willingness ' + str(trustBeliefs.willingness))
                 else:
                     trustBeliefs.updateWillingness(15/100)
+                    print('receivedMessages ' + message)
+                    print('competence ' + str(trustBeliefs.competence))
+                    print('willingness ' + str(trustBeliefs.willingness))
 
             # The human is willing to help the robot rescue a mildly injured victim
             if 'Rescue together' in message and self._goalVic and 'mild' in self._goalVic:
                 # trustBeliefs[self._humanName]['willingness'] += np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0 , 1)
                 trustBeliefs.updateWillingness(15/100)
+                print('receivedMessages ' + message)
+                print('competence ' + str(trustBeliefs.competence))
+                print('willingness ' + str(trustBeliefs.willingness))
 
             # The human is willing to help the robot rescue a critically injured victim
             if 'Rescue' in message and self._goalVic and 'critical' in self._goalVic:
                 # trustBeliefs[self._humanName]['willingness'] += np.clip(trustBeliefs[self._humanName]['willingness']/100 * 15, 0 , 1)
                 trustBeliefs.updateWillingness(15/100)
+                print('receivedMessages ' + message)
+                print('competence ' + str(trustBeliefs.competence))
+                print('willingness ' + str(trustBeliefs.willingness))
 
             if 'Remove' in message:                                                 # Only good option if we cannot work togheter
                 #receivedMessages.remove(message)
                 self.waitingForDecisionResponse = False
+                print('receivedMessages ' + message)
+                print('competence ' + str(trustBeliefs.competence))
+                print('willingness ' + str(trustBeliefs.willingness))
 
             # Increase agent trust in a team member that rescued a victim
             #if 'Collect' in message:
@@ -1157,6 +1199,7 @@ class BaselineAgent(ArtificialBrain):
         #     csv_writer.writerow([self._humanName,trustBeliefs[self._humanName]['competence'],trustBeliefs[self._humanName]['willingness']])
 
         return trustBeliefs
+
 
     def _sendMessage(self, mssg, sender):
         '''
