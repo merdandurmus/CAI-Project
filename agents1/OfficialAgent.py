@@ -74,12 +74,14 @@ class TrustBelief:
     def get_binary_competence(self):
         competence = (self.competence + 1) / 2
         return np.random.choice([0, 1], 1, p=[1-competence, competence])
+        # return True
     
     def get_trust(self):
         competence = (self.competence + 1) / 2
         willingness = (self.willingness + 1) / 2
         trust = (competence + willingness) / 2
         return np.random.choice([0, 1], 1, p=[1-trust, trust])
+        # return True
 
     def updateCompetence(self, percent, withFlush = False):
         self.competence = np.clip(self.competence + TrustBelief.basicChange * percent, -1, 1)
@@ -144,6 +146,8 @@ class BaselineAgent(ArtificialBrain):
         self.waitingForDecisionResponse = False
         self._max_wait_time = 30
         self._alreadyUpdated = True
+        self._debugging = False
+        self._overrideDirectlyToDecidingWhatToDo = False
 
     def initialize(self):
         # Initialization of the state tracker and navigation algorithm
@@ -184,7 +188,10 @@ class BaselineAgent(ArtificialBrain):
         if BaselineAgent.print_counter % 30 == 0: # printing every 30 iterations how the competence and willingness are evolving
             print('competence ' + str(trustBeliefs.competence))
             print('willingness ' + str(trustBeliefs.willingness))
+            
+            
         BaselineAgent.print_counter += 1
+        
 
         # reset messages to no new ones after processing them
         self.received_messages = []
@@ -681,7 +688,7 @@ class BaselineAgent(ArtificialBrain):
                 self._state_tracker.update(state)
                 action = self._navigator.get_move_action(self._state_tracker)
                 trust = trustBeliefs.get_trust()
-                if action != None:
+                if action != None and not self._overrideDirectlyToDecidingWhatToDo:
                     # Identify victims present in the area
                     for info in state.values():
                         if 'class_inheritance' in info and 'CollectableBlock' in info['class_inheritance']:
@@ -773,7 +780,7 @@ class BaselineAgent(ArtificialBrain):
                     # Execute move actions to explore the area
                     return action, {}
                 
-
+                self._overrideDirectlyToDecidingWhatToDo = False
                 #TODO FOLLOW_ROOM_SEARCH_PATH: take into account trust when interpreting the message from human
                 #TODO FOLLOW_ROOM_SEARCH_PATH: don't wait too long until making a decision (at some point do what you think it should be done)
                 # Communicate that the agent did not find the target victim in the area while the human previously communicated the victim was located here
@@ -856,6 +863,7 @@ class BaselineAgent(ArtificialBrain):
                     self._waiting = False
                     self._todo.append(self._recentVic)
                     self._recentVic = None
+                    # self._goalVic = None
                     self._phase = Phase.FIND_NEXT_GOAL
                 # Remain idle untill the human communicates to the agent what to do with the found victim
                 if self.received_messages_content and self._waiting and self.received_messages_content[-1] != 'Rescue' and self.received_messages_content[-1] != 'Continue':
@@ -917,7 +925,13 @@ class BaselineAgent(ArtificialBrain):
                                 trustBeliefs.updateCompetence(-20/100, True)
                                 trustBeliefs.updateWillingness(-20/100, True)
                                 self._waiting = False
-                                self._phase = Phase.FIND_NEXT_GOAL
+                                if 'critical' in self._goalVic:
+                                    self._overrideContinue = True
+                                else:
+                                    self._overrideRescueAlone = True
+                                self._recentVic = self._goalVic
+                                self._overrideDirectlyToDecidingWhatToDo = True
+                                self._phase = Phase.FOLLOW_ROOM_SEARCH_PATH
                                 return None, {}
                             self._waiting = True
                             self._moving = False
