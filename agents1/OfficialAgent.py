@@ -38,7 +38,7 @@ class Phase(enum.Enum):
 
 class TrustBelief:
     path = '/beliefs/allTrustBeliefs.csv'
-    default = 1.0
+    default = 0.5
     basicChange = 0.5
     attributes = ['competence', 'willingness']
     def __init__(self, humanName, folder) -> None:
@@ -67,7 +67,8 @@ class TrustBelief:
     
     def get_binary_willingness(self):
         willingness = (self.willingness + 1) / 2
-        return np.random.choice([0, 1], 1, p=[1-willingness, willingness])
+        # return np.random.choice([0, 1], 1, p=[1-willingness, willingness])
+        return True
     
     
     def get_binary_competence(self):
@@ -142,6 +143,7 @@ class BaselineAgent(ArtificialBrain):
         self._timeStartedWaiting = datetime.now()
         self.waitingForDecisionResponse = False
         self._max_wait_time = 30
+        self._alreadyUpdated = True
 
     def initialize(self):
         # Initialization of the state tracker and navigation algorithm
@@ -436,25 +438,37 @@ class BaselineAgent(ArtificialBrain):
                         objects.append(info)
                         # Communicate which obstacle is blocking the entrance
                         if self._answered == False and not self._remove and not self._waiting:
-                            self._sendMessage('Found rock blocking ' + str(self._door['room_name']) + '. Please decide whether to "Remove" or "Continue" searching. \n \n \
-                                Important features to consider are: \n safe - victims rescued: ' + str(self._collectedVictims) + ' \n explore - areas searched: area ' + str(self._searchedRooms).replace('area ','') + ' \
-                                \n clock - removal time: 5 seconds \n afstand - distance between us: ' + self._distanceHuman ,'RescueBot')
-                            self._waiting = True
-                            self._timeStartedWaiting = datetime.now()
+                            if trustBeliefs.get_binary_willingness():
+                                self._sendMessage('Found rock blocking ' + str(self._door['room_name']) + '. Please decide whether to "Remove" or "Continue" searching. \n \n \
+                                    Important features to consider are: \n safe - victims rescued: ' + str(self._collectedVictims) + ' \n explore - areas searched: area ' + str(self._searchedRooms).replace('area ','') + ' \
+                                    \n clock - removal time: 5 seconds \n afstand - distance between us: ' + self._distanceHuman ,'RescueBot')
+                                self._waiting = True
+                                self._timeStartedWaiting = datetime.now()
+                            else:
+                                self._waiting = True
+                                self._overrideContinue = True
                         # Determine the next area to explore if the human tells the agent not to remove the obstacle
                         elif (self.received_messages_content and self.received_messages_content[-1] == 'Continue' and not self._remove) or self._overrideContinue:
+                            if not self._overrideContinue: 
+                                trustBeliefs.updateWillingness(10/100, True) # he is willing to help by giving directions
+                                trustBeliefs.updateCompetence(-20/100, True) # he is no competetnt to help 
+                                # trustBeliefs.updateWillingness(-30/100 if "close" in self.decisionDistance else -20/100, True)
                             self._overrideContinue = False
                             self._answered = True
                             self._waiting = False
                             # Add area to the to do list
                             self._tosearch.append(self._door['room_name'])
+                            self._alreadyUpdated = True
                             self._phase = Phase.FIND_NEXT_GOAL
                         # Wait for the human to help removing the obstacle and remove the obstacle together
                         # ------------------
                         elif self.received_messages_content and self.received_messages_content[-1] == 'Remove' or self._remove:
+                            trustBeliefs.updateWillingness(10/100, True) # he is willing to help by giving directions
+                            # trustBeliefs.updateCompetence(20/100, True)
                             # if the human indicates to remove the obstacle, remove with help if trustworthy or if no other victims left
+                            self._alreadyUpdated = False
                             self._timeStartedWaiting = datetime.now()
-                            if len(self._remainingZones) > 1 or self._nr_skipped_action >= self._max_allowed_skips or trustBeliefs.get_trust():
+                            if len(self._remainingZones) > 1 or self._nr_skipped_action >= self._max_allowed_skips or trustBeliefs.get_binary_willingness(): #TODO testing
                                 if not self._remove:
                                     self._answered = True
                                 # Tell the human to come over and be idle untill human arrives
@@ -468,13 +482,22 @@ class BaselineAgent(ArtificialBrain):
                                     return None, {}
                                 self._nr_skipped_action = 0
                             else:
+                                self._alreadyUpdated = True
                                 self._nr_skipped_action += 1
                                 self._phase = Phase.FIND_NEXT_GOAL
                                 break
                         # Remain idle untill the human communicates what to do with the identified obstacle
                         elif self._waiting:
+                            if state[{'is_human_agent': True}] and not self._alreadyUpdated:
+                                trustBeliefs.updateCompetence(20/100, True) # he is competent to help (not lazy)
+                                trustBeliefs.updateWillingness(20/100, True) # he was not lying
+                                self._alreadyUpdated = True
+
+
                             if datetime.now().timestamp() - self._timeStartedWaiting.timestamp() > self._max_wait_time:
-                                trustBeliefs.updateCompetence(-15/100, True)
+                                trustBeliefs.updateWillingness(-20/100, True) # he is not willing to help with answers or he is lying
+                                if not self._alreadyUpdated: 
+                                    trustBeliefs.updateCompetence(-20/100, True)  
                                 self._overrideContinue = True
                                 self._nr_skipped_action = 0
 
@@ -1103,7 +1126,8 @@ class BaselineAgent(ArtificialBrain):
             if 'Continue' in message:
                 if self.waitingForDecisionResponse:                        # We can collaborate but you refused, reduce willingness
                     trustChangeValue = 30/100 if "close" in self.decisionDistance else 20/100 
-                    trustBeliefs.updateWillingness(-trustChangeValue)
+                    # trustBeliefs.updateWillingness(-trustChangeValue)
+                    # trustBeliefs.updateCompetence(-trustChangeValue)
                     self.decisionDistance = None
                     self.waitingForDecisionResponse = False
                 else:
