@@ -31,7 +31,7 @@ def output_logger(fld):
             res = {action_header[i]: row[i] for i in range(len(action_header))}
             action_contents.append(res)
 
-    with open(fld+'/beliefs/currentTrustBelief.csv') as csvfile:
+    with open(fld+'/beliefs/allTrustBeliefs.csv') as csvfile:
         reader = csv.reader(csvfile, delimiter=';', quotechar="'")
         for row in reader:
             if trustfile_header==[]:
