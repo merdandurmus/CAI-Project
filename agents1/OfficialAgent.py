@@ -85,6 +85,7 @@ class TrustBelief:
 
     def updateCompetence(self, percent, withFlush = False):
         self.competence = np.clip(self.competence + TrustBelief.basicChange * percent, -1, 1)
+        self.writeArgs()
         if withFlush:
             self.flushUpdates()
     
@@ -92,13 +93,18 @@ class TrustBelief:
         self.willingness = np.clip(self.willingness + TrustBelief.basicChange * percent, -1, 1)
         if withFlush:
             self.flushUpdates()
+        self.writeArgs()
 
     def flushUpdates(self):
         with open(self.folder + TrustBelief.path, mode='w') as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             csv_writer.writerow(['name','competence','willingness'])
             csv_writer.writerow([self.humanName,self.competence,self.willingness])
-
+    def writeArgs(self):
+        with open(self.folder + '/beliefs/params.csv') as f_writer:
+            writer_object = writer(f_object)
+            writer_object.writerow([self.humanName,self.competence,self.willingness])        
+            f_object.close()
 
 class BaselineAgent(ArtificialBrain):
     def __init__(self, slowdown, condition, name, folder):
