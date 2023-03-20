@@ -43,8 +43,8 @@ class TrustBelief:
     attributes = ['competence', 'willingness']
     def __init__(self, humanName, folder) -> None:
         self.folder = folder
-        self.competence = 1.0
-        self.willingness = 1.0
+        self.competence = 0.5
+        self.willingness = 0.5
         self.humanName = humanName
 
         trustfile_header = []
@@ -67,21 +67,21 @@ class TrustBelief:
     
     def get_binary_willingness(self):
         willingness = (self.willingness + 1) / 2
-        # return np.random.choice([0, 1], 1, p=[1-willingness, willingness])
-        return False
+        return np.random.choice([0, 1], 1, p=[1-willingness, willingness])
+        # return np.random.choice([False, True], 1)
     
     
     def get_binary_competence(self):
         competence = (self.competence + 1) / 2
-        # return np.random.choice([0, 1], 1, p=[1-competence, competence])
-        return False
+        return np.random.choice([0, 1], 1, p=[1-competence, competence])
+        # return np.random.choice([False, True], 1)
     
     def get_trust(self):
         competence = (self.competence + 1) / 2
         willingness = (self.willingness + 1) / 2
         trust = (competence + willingness) / 2
-        # return np.random.choice([0, 1], 1, p=[1-trust, trust])
-        return False
+        return np.random.choice([0, 1], 1, p=[1-trust, trust])
+        # return np.random.choice([False, True], 1)
 
     def updateCompetence(self, percent, withFlush = False):
         self.competence = np.clip(self.competence + TrustBelief.basicChange * percent, -1, 1)
@@ -151,6 +151,7 @@ class BaselineAgent(ArtificialBrain):
         self._askAllQuestionsRock = False
         self._askAllQuestionsCritical = False
         self._resetSearchedRooms = False
+        self._allDropZones = {}
 
     def initialize(self):
         # Initialization of the state tracker and navigation algorithm
@@ -188,9 +189,9 @@ class BaselineAgent(ArtificialBrain):
         self._processMessages(state, self._teamMembers, self._condition, trustBeliefs)
         self._trustBelief(self._teamMembers, trustBeliefs, self._folder, self._receivedMessages)
         
-        if BaselineAgent.print_counter % 30 == 0: # printing every 30 iterations how the competence and willingness are evolving
-            print('competence ' + str(trustBeliefs.competence))
-            print('willingness ' + str(trustBeliefs.willingness))
+        # if BaselineAgent.print_counter % 30 == 0: # printing every 30 iterations how the competence and willingness are evolving
+        #     print('competence ' + str(trustBeliefs.competence))
+        #     print('willingness ' + str(trustBeliefs.willingness))
         # print(self._searched_rooms_by_robot)
             
         BaselineAgent.print_counter += 1
@@ -237,8 +238,11 @@ class BaselineAgent(ArtificialBrain):
         # Send the hidden score message for displaying and logging the score during the task, DO NOT REMOVE THIS
         self._sendMessage('Our score is ' + str(state['rescuebot']['score']) + '.', 'RescueBot')
 
+        
+
         # Ongoing loop untill the task is terminated, using different phases for defining the agent's behavior
         while True:
+            print(self._phase)
             if Phase.INTRO == self._phase:
                 # Send introduction message
                 self._sendMessage('Hello! My name is RescueBot. Together we will collaborate and try to search and rescue the 8 victims on our right as quickly as possible. \
@@ -261,6 +265,7 @@ class BaselineAgent(ArtificialBrain):
                 remainingZones = []
                 remainingVics = []
                 remaining = {}
+                allDropZones = {}
                 # Identification of the location of the drop zones
                 zones = self._getDropZones(state)
                 # Identification of which victims still need to be rescued and on which location they should be dropped
@@ -269,9 +274,12 @@ class BaselineAgent(ArtificialBrain):
                         remainingZones.append(info)
                         remainingVics.append(str(info['img_name'])[8:-4])
                         remaining[str(info['img_name'])[8:-4]] = info['location']
+                    allDropZones[str(info['img_name'])[8:-4]] = info['location']
                 if remainingZones:
                     self._remainingZones = remainingZones
                     self._remaining = remaining
+                    self._allDropZones = allDropZones
+                    
 
 
                 # Remain idle if there are no victims left to rescue
@@ -313,6 +321,7 @@ class BaselineAgent(ArtificialBrain):
                             return Idle.__name__, {'duration_in_ticks': 25}
                     # Define a previously found victim as target victim
                     if vic in self._foundVictims and vic not in self._todo:
+                        print("here")
                         self._goalVic = vic
                         self._goalLoc = remaining[vic]
 
@@ -465,6 +474,10 @@ class BaselineAgent(ArtificialBrain):
                                     \n clock - removal time: 5 seconds \n afstand - distance between us: ' + self._distanceHuman ,'RescueBot')
                                 self._waiting = True
                                 self._timeStartedWaiting = datetime.now()
+                                if self._goalVic and self._goalVic in self._foundVictims:
+                                    self._foundVictimLocs.pop(self._goalVic, None)
+                                    self._foundVictims.remove(self._goalVic)
+                                    self._goalVic = None
                             else:
                                 self._waiting = True
                                 self._overrideContinue = True
@@ -537,6 +550,10 @@ class BaselineAgent(ArtificialBrain):
                                     \n clock - removal time: 10 seconds','RescueBot')
                                 self._waiting = True
                                 self._timeStartedWaiting = datetime.now()
+                                if self._goalVic and self._goalVic in self._foundVictims:
+                                    self._foundVictimLocs.pop(self._goalVic, None)
+                                    self._foundVictims.remove(self._goalVic)
+                                    self._goalVic = None
                             else:
                                 self._waiting = True
                                 self._overrideRemoveAlone = True
@@ -581,6 +598,10 @@ class BaselineAgent(ArtificialBrain):
                                     \n clock - removal time together: 3 seconds \n afstand - distance between us: ' + self._distanceHuman + '\n clock - removal time alone: 20 seconds','RescueBot')
                                 self._waiting = True
                                 self._timeStartedWaiting = datetime.now()
+                                if self._goalVic and self._goalVic in self._foundVictims:
+                                    self._foundVictimLocs.pop(self._goalVic, None)
+                                    self._foundVictims.remove(self._goalVic)
+                                    self._goalVic = None
                             else:
                                 self._waiting = True
                                 self._overrideRemoveAlone = True
@@ -719,6 +740,7 @@ class BaselineAgent(ArtificialBrain):
                                 if vic == self._goalVic:
                                     # Communicate which victim was found
                                     self._sendMessage('Found ' + vic + ' in ' + self._door['room_name'] + ' because you told me ' + vic + ' was located here.','RescueBot')
+                                    self._timeStartedWaiting = datetime.now()
                                     # Add the area to the list with searched areas
                                     if self._door['room_name'] not in self._searchedRooms:
                                         self._searchedRooms.append(self._door['room_name'])
@@ -730,7 +752,7 @@ class BaselineAgent(ArtificialBrain):
                             # Identify injured victim in the area
                             if 'healthy' not in vic:
                                 if vic in self._foundVictims:
-                                    if self._foundVictimLocs[vic]['room'] != self._door or vic in self._collectedVictims:
+                                    if self._foundVictimLocs[vic]['room'] != self._door['room_name'] or vic in self._collectedVictims:
                                         trustBeliefs.updateWillingness(-50/100, True)
                                         self._foundVictimLocs[vic] = {'location': info['location'],'room': self._door['room_name'], 'obj_id': info['obj_id']}
 
@@ -811,7 +833,10 @@ class BaselineAgent(ArtificialBrain):
                     # Remove the victim location from memory
                     self._foundVictimLocs.pop(self._goalVic, None)
                     self._foundVictims.remove(self._goalVic)
+                    self._goalVic = None
                     self._roomVics = []
+                    self._waiting = False
+                    self._rescue = None
                     # Reset received messages (bug fix)
                     self.received_messages = []
                     self.received_messages_content = []
@@ -853,7 +878,8 @@ class BaselineAgent(ArtificialBrain):
                     self._waiting = False
                     # ------------ Some new bug fixes from original creator
                     self._goalVic = self._recentVic
-                    self._goalLoc = self._remaining[self._goalVic]
+                    # print(self._remaining)
+                    self._goalLoc = self._allDropZones[self._goalVic]
                     self._recentVic = None
                     self._phase = Phase.PLAN_PATH_TO_VICTIM
                 
