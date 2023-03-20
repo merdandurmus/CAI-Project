@@ -100,8 +100,9 @@ class TrustBelief:
             csv_writer = csv.writer(csv_file, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             csv_writer.writerow(['name','competence','willingness'])
             csv_writer.writerow([self.humanName,self.competence,self.willingness])
+
     def writeArgs(self):
-        with open(self.folder + '/beliefs/params.csv') as f_object:
+        with open(self.folder + '/beliefs/params.csv', "a") as f_object:
             writer_object = csv.writer(f_object)
             writer_object.writerow([self.humanName,self.competence,self.willingness])        
             f_object.close()
